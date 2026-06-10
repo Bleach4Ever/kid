@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { clamp, easeOutBack } from '../utils.js';
+import { VARIANTS } from './Variants.js';
 
 export const EGG_STYLES = {
   triceratops: { shell: '#d8f0b3', spot: '#6da55b', pattern: 'horns' },
@@ -75,7 +76,7 @@ function addEggMark(group, style, mat) {
   }
 }
 
-export function createEgg(species, nest = null, dropTarget = null) {
+export function createEgg(species, nest = null, dropTarget = null, variant = null) {
   const group = new THREE.Group();
   const style = EGG_STYLES[species] || EGG_STYLES.triceratops;
   const fancy = fancyEggsUnlocked && Math.random() < 0.25
@@ -102,6 +103,18 @@ export function createEgg(species, nest = null, dropTarget = null) {
   }
   addEggMark(group, style, spotMat);
 
+  // 变体蛋的预告：壳顶多一颗变体色的大闪斑（孩子会学会认出“特别的蛋”）
+  if (variant && VARIANTS[variant]) {
+    const shimmerMat = makeMat(VARIANTS[variant].body);
+    if (VARIANTS[variant].emissive) {
+      shimmerMat.emissive = new THREE.Color(VARIANTS[variant].emissive);
+      shimmerMat.emissiveIntensity = 0.5;
+    }
+    const shimmer = new THREE.Mesh(new THREE.IcosahedronGeometry(0.11, 0), shimmerMat);
+    shimmer.position.set(0, 1.08, 0);
+    group.add(shimmer);
+  }
+
   const hatchTime = 20 + Math.random() * 10;
   let age = 0;
   let hatchTriggered = false;
@@ -112,6 +125,7 @@ export function createEgg(species, nest = null, dropTarget = null) {
     species,
     nest,
     fancy: !!fancy, // 调试/测试可见：是否华丽配色
+    variant, // 孵化时传给 createDinosaur
     isEgg: true,
     alive: true,
     consumed: false,

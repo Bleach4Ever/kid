@@ -36,11 +36,30 @@ export class Pedia {
       if (e.target === this.root) this.close();
     });
     bus.on('place', ({ kind }) => this._unlock(kind, 'seen'));
-    bus.on('hatch', ({ species }) => {
+    bus.on('hatch', ({ species, variant }) => {
       this._unlock(species, 'seen');
       this._unlock(species, 'hatched');
+      if (variant) this._stampVariant(species, variant);
     });
     bus.on('raised', ({ species }) => this._unlock(species, 'raised'));
+  }
+
+  // 变体收集戳：per-species variants 映射（旧档案无此字段，懒初始化）
+  _stampVariant(species, variant) {
+    if (!SPECIES[species]) return;
+    const pedia = profile.get('pedia', {});
+    const rec = pedia[species] || (pedia[species] = { seen: false, hatched: false, raised: false });
+    const variants = rec.variants || (rec.variants = {});
+    if (variants[variant]) return;
+    variants[variant] = true;
+    profile.set('pedia', pedia);
+    this.toolbar.setBadge('pedia', true);
+    showToast([
+      { img: `./icons/${species}.svg`, alt: t(`tool.${species}`) },
+      { text: '🎨', cls: 'stamp' },
+      { text: '✨', cls: 'spark' },
+    ]);
+    this.audio.playUnlock();
   }
 
   // false → true 时持久化 + 红点 + 吐司 + 解锁音

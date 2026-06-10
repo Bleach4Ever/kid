@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { WORLD_SIZE, SEA_LEVEL } from '../constants.js';
 import { clamp, easeOutBack, lerp, TAU } from '../utils.js';
+import { VARIANTS } from './Variants.js';
 
 const BOUND = WORLD_SIZE * 0.46;
 const eyeMat = new THREE.MeshStandardMaterial({ color: '#30283a', roughness: 0.7 });
@@ -364,9 +365,17 @@ function addSleepMarker(group) {
   return marker;
 }
 
-function buildModel(species, config) {
-  const bodyMat = material(config.body);
-  const accentMat = material(config.accent);
+function buildModel(species, config, variant) {
+  // 变体只换配色（sparkle 额外自发光），几何完全复用
+  const v = variant ? VARIANTS[variant] : null;
+  const bodyMat = material(v ? v.body : config.body);
+  const accentMat = material(v ? v.accent : config.accent);
+  if (v?.emissive) {
+    bodyMat.emissive = new THREE.Color(v.emissive);
+    bodyMat.emissiveIntensity = 0.35;
+    accentMat.emissive = new THREE.Color(v.emissive);
+    accentMat.emissiveIntensity = 0.25;
+  }
   if (species === 'triceratops') return buildTriceratops(bodyMat, accentMat);
   if (species === 'brachiosaurus') return buildBrachiosaurus(bodyMat, accentMat);
   if (species === 'stegosaurus') return buildStegosaurus(bodyMat, accentMat);
@@ -431,9 +440,12 @@ function nearestNest(self, entities) {
   return best;
 }
 
-export function createDinosaur(species, saved = null) {
+export function createDinosaur(species, saved = null, opts = {}) {
   const config = SPECIES[species] || SPECIES.triceratops;
-  const model = buildModel(species, config);
+  // 变体：新孵化走 opts.variant，读档走 saved.vr（旧档无此字段 → 普通色）
+  const variant = opts.variant || saved?.vr || null;
+  const variantCfg = variant ? VARIANTS[variant] : null;
+  const model = buildModel(species, config, variant);
   const group = model.group;
   const alertMarker = addAlertMarker(group);
   const sleepMarker = addSleepMarker(group);
@@ -445,6 +457,7 @@ export function createDinosaur(species, saved = null) {
     isDinosaur: true,
     flying: Boolean(config.flying),
     swimming: Boolean(config.swimming),
+    variant,
     alive: true,
     consumed: false,
     size: config.baseSize * 0.65,
@@ -471,6 +484,7 @@ export function createDinosaur(species, saved = null) {
   const flightRadius = 8 + Math.random() * 13;
   const flightHeight = 6 + Math.random() * 5;
   let wakeTimer = 0; // 被摸醒后多久内不再入睡
+  let sparkleTimer = 1 + Math.random() * 2; // sparkle 变体的金色粒子涓流节拍
   let callTimer = 10 + Math.random() * 15;
   let nodTime = 0;
   let emoteTime = -1;
@@ -647,6 +661,19 @@ export function createDinosaur(species, saved = null) {
     group.scale.setScalar(visualScale);
     sleepMarker.visible = false;
 
+    // sparkle 变体：每 2.5-4s 滴落 3 颗金色微粒（走共享粒子池，开销可忽略）
+    if (variantCfg?.flair && ctx.particles) {
+      sparkleTimer -= dt;
+      if (sparkleTimer <= 0) {
+        sparkleTimer = 2.5 + Math.random() * 1.5;
+        const p = group.position;
+        ctx.particles.burst({ x: p.x, y: p.y + wrapper.size, z: p.z }, {
+          count: 3, colors: ['#ffd96b', '#fff2c0', '#ffe9a8'],
+          speed: 0.5, gravity: -0.8, life: 1.1, size: 0.12,
+        });
+      }
+    }
+
     if (emoteTime >= 0) {
       emoteTime += dt;
       const t = Math.min(1, emoteTime / 0.9);
@@ -796,6 +823,7 @@ export function createDinosaur(species, saved = null) {
     };
     // Infinity（翼龙）无法过 JSON，省略后读档时按物种重新取默认值
     if (Number.isFinite(wrapper.hungerTimer)) state.hunger = r(wrapper.hungerTimer);
+    if (variant) state.vr = variant;
     return state;
   };
 

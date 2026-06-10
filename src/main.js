@@ -25,6 +25,7 @@ import { Unlocks } from './systems/Unlocks.js';
 import { createTree, createFlower } from './entities/Tree.js';
 import { createDinosaur, SPECIES } from './entities/Dinosaur.js';
 import { createEgg, createNest as createNestEntity, createPoop } from './entities/Ecosystem.js';
+import { rollVariant, VARIANTS } from './entities/Variants.js';
 import { LIMITS, SEA_LEVEL } from './constants.js';
 
 // ---------------- 语言（先于一切 UI） ----------------
@@ -271,7 +272,9 @@ function layEgg(parent, nest) {
     .multiplyScalar(Math.max(0.5, parent.size * 0.55));
   const start = parent.object3d.position.clone().add(behind);
   start.y += parent.flying ? 0 : Math.max(0.8, parent.size * 0.65);
-  const egg = createEgg(parent.species, nest, target);
+  // 变体在产蛋时就掷出：蛋壳上的闪斑提前预告（🍀 幸运符让概率翻倍）
+  const variant = rollVariant({ lucky: profile.get('unlocks', []).includes('charm.lucky') });
+  const egg = createEgg(parent.species, nest, target, variant);
   addEntity(egg, start);
   nest.egg = egg;
   audio.playPlop();
@@ -285,16 +288,23 @@ function hatchEgg(egg) {
   requestRemove(egg);
   // 硬上限：到顶时蛋安静移除、不出生（不放音效不撒彩纸）
   if (aliveDinoCount() >= quality.dinoCap) return;
-  const baby = createDinosaur(egg.species);
+  const baby = createDinosaur(egg.species, null, { variant: egg.variant });
   addEntity(baby, position);
   audio.playHatch();
-  // 彩纸庆祝 + 新生儿开心一跳
+  // 彩纸庆祝 + 新生儿开心一跳；变体多一段变体色的二段环形慢粒子
   particles.burst({ x: position.x, y: position.y + 0.8, z: position.z }, {
     count: 24, colors: ['#ff7d7d', '#ffd166', '#6ec6ff', '#9ef0a0', '#f7a8ff'],
     speed: 2.6, gravity: 4.5, life: 1, size: 0.18,
   });
+  if (egg.variant) {
+    const v = VARIANTS[egg.variant];
+    setTimeout(() => particles.burst({ x: position.x, y: position.y + 1.2, z: position.z }, {
+      count: 16, colors: [v.body, v.accent, '#ffffff'],
+      speed: 1.2, gravity: -0.6, life: 1.4, size: 0.16,
+    }), 350);
+  }
   baby.startEmote?.('hatch', ctx);
-  bus.emit('hatch', { species: egg.species });
+  bus.emit('hatch', { species: egg.species, variant: egg.variant || null });
 }
 
 function spawnPoop(dinosaur) {
@@ -589,6 +599,7 @@ window.__world = {
   worldEvents,
   profile,
   unlocksSys,
+  variants: { roll: rollVariant, VARIANTS },
   seaLevel: SEA_LEVEL,
   lastPet: 0, // 调试计数：冒烟测试验证“点恐龙=抚摸”
 };

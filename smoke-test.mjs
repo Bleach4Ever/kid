@@ -552,6 +552,35 @@ const unlockAfterReload = await page.evaluate(() => ({
   mosasaurusHidden: document.querySelector('#dino-bar .tool-btn[data-tool="mosasaurus"]').classList.contains('hidden-tool'),
 }));
 
+// ---------------- 变体（闪光恐龙）----------------
+// 读档 vr 恢复 → 产蛋（强制掷出 sparkle）→ 蛋带变体 → 孵出 sparkle 宝宝 → 图鉴盖 🎨 戳
+await page.locator('#start-btn').click();
+await page.waitForTimeout(400);
+const variantState = await page.evaluate(() => {
+  const w = window.__world;
+  w.restoreWorld({
+    preset: 'park',
+    skyIndex: 0,
+    entities: [{ k: 'dino', s: 'trex', x: 0, z: 0, age: 60, egg: 999, hunger: 999, vr: 'sparkle' }],
+  });
+  const parent = w.entities.find((e) => e.species === 'trex');
+  const restored = { variant: parent.variant, savedVr: parent.getSaveState().vr };
+  const nest = w.createNest('trex', { x: 2, z: 2 });
+  const orig = Math.random;
+  Math.random = () => 0.001; // rollVariant 必出 sparkle
+  const egg = w.layEgg(parent, nest);
+  Math.random = orig;
+  w.hatchEgg(egg);
+  const baby = w.entities[w.entities.length - 1];
+  return {
+    restored,
+    eggVariant: egg.variant,
+    babyVariant: baby.variant,
+    babySavedVr: baby.getSaveState().vr,
+    pediaVariantStamp: !!w.profile.get('pedia').trex?.variants?.sparkle,
+  };
+});
+
 // ---------------- Profile v1 → v2 迁移 ----------------
 // 写入带图鉴印章的 v1 档案 → 加载后 counters 慷慨回填（老玩家进度不清零）
 await page.evaluate(() => {
@@ -788,6 +817,7 @@ console.log('dino drawer:', dinoBarState);
 console.log('locked click denied:', lockedClick);
 console.log('species unlock milestone:', unlockBefore, '-> after reload:', unlockAfterReload);
 console.log('profile v1->v2 migration:', migrated);
+console.log('variant chain:', variantState);
 console.log('i18n switch:', i18nState, ' after reload:', i18nAfterReload);
 console.log('heights codec roundtrip ok:', codecOk);
 console.log('save before:', beforeSave, ' continue visible:', continueVisible);
@@ -898,6 +928,12 @@ if (!mosasaurState.exists || !mosasaurState.water || !mosasaurState.swimming || 
 }
 if (migrated.v !== 2 || migrated.hatched !== 2 || migrated.raisedHerb !== 1 || migrated.raisedCarn !== 1 || migrated.stars !== 4) {
   console.error('\n❌ profile v1 → v2 migration backfill wrong', migrated);
+  process.exit(1);
+}
+if (variantState.restored.variant !== 'sparkle' || variantState.restored.savedVr !== 'sparkle' ||
+    variantState.eggVariant !== 'sparkle' || variantState.babyVariant !== 'sparkle' ||
+    variantState.babySavedVr !== 'sparkle' || !variantState.pediaVariantStamp) {
+  console.error('\n❌ variant roll/save/hatch/pedia chain broken', variantState);
   process.exit(1);
 }
 if (
