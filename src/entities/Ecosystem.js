@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { clamp, easeOutBack } from '../utils.js';
 
-const EGG_STYLES = {
+export const EGG_STYLES = {
   triceratops: { shell: '#d8f0b3', spot: '#6da55b', pattern: 'horns' },
   brachiosaurus: { shell: '#bfe9df', spot: '#438f82', pattern: 'neck' },
   stegosaurus: { shell: '#ffe0a1', spot: '#d6823d', pattern: 'plates' },

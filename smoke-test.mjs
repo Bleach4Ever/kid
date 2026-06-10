@@ -242,6 +242,79 @@ const petResult = await page.evaluate(() => ({
   petDinoAwake: window.__world.__petDino.lifeState !== 'sleeping',
 }));
 
+// ---------------- 阶段 4：恐龙图鉴 ----------------
+// 清空图鉴 → 只放一只迅猛龙 → 验证 seen 解锁、红点、吐司、模态、跨 reload/重置持久
+await page.evaluate(() => {
+  const p = JSON.parse(localStorage.getItem('dino-world:profile'));
+  p.pedia = {};
+  localStorage.setItem('dino-world:profile', JSON.stringify(p));
+});
+await page.reload({ waitUntil: 'networkidle' });
+await page.locator('#start-btn').click();
+await page.waitForTimeout(400);
+// 预设恐龙挪去角落，确保点击落在地形上
+await page.evaluate(() => {
+  for (const e of window.__world.entities) {
+    if (e.isDinosaur && !e.flying) {
+      e.object3d.position.set(-14 + Math.random() * 4, 0, -10 + Math.random() * 4);
+    }
+  }
+});
+await page.locator('#toolbar .tool-btn').nth(8).click({ force: true }); // 迅猛龙
+await page.mouse.click(520, 380);
+await page.waitForTimeout(250);
+const pediaUnlock = await page.evaluate(() => ({
+  raptorSeen: !!JSON.parse(localStorage.getItem('dino-world:profile')).pedia?.raptor?.seen,
+  toastShown: !!document.querySelector('.pedia-toast'),
+  badgeOn: document.querySelectorAll('#top-bar .tool-btn')[3].classList.contains('has-badge'),
+}));
+
+// 打开 📖：7 张卡片、未解锁卡有剪影 class、红点清除
+await page.locator('#top-bar .tool-btn').nth(3).click({ force: true });
+await page.waitForTimeout(250);
+const pediaModal = await page.evaluate(() => {
+  const modal = document.getElementById('pedia-modal');
+  return {
+    visible: !modal.classList.contains('hidden'),
+    cards: modal.querySelectorAll('.pedia-card').length,
+    locked: modal.querySelectorAll('.pedia-card.locked').length,
+    badgeCleared: !document.querySelectorAll('#top-bar .tool-btn')[3].classList.contains('has-badge'),
+  };
+});
+
+// 关闭模态 → 游戏继续：还能正常放置实体
+await page.locator('.pedia-close').click();
+await page.waitForTimeout(150);
+const beforePlaceCount = await page.evaluate(() => {
+  for (const e of window.__world.entities) {
+    if (e.isDinosaur && !e.flying) {
+      e.object3d.position.set(-14 + Math.random() * 4, 0, -10 + Math.random() * 4);
+    }
+  }
+  return {
+    modalHidden: document.getElementById('pedia-modal').classList.contains('hidden'),
+    entities: window.__world.entities.length,
+  };
+});
+await page.mouse.click(450, 380);
+await page.waitForTimeout(200);
+const afterPlaceCount = await page.evaluate(() => window.__world.entities.length);
+
+// reload 后解锁持久
+await page.reload({ waitUntil: 'networkidle' });
+const pediaAfterReload = await page.evaluate(
+  () => !!JSON.parse(localStorage.getItem('dino-world:profile')).pedia?.raptor?.seen
+);
+
+// 🔄 重置世界后解锁仍在（pedia 在 profile，不随世界存档清除）
+await page.locator('#start-btn').click();
+await page.waitForTimeout(300);
+await page.locator('#top-bar .tool-btn').nth(5).click({ force: true }); // 🔄 重置
+await page.waitForTimeout(300);
+const pediaAfterReset = await page.evaluate(
+  () => !!JSON.parse(localStorage.getItem('dino-world:profile')).pedia?.raptor?.seen
+);
+
 await browser.close();
 
 console.log('canvas:', `${Math.round(canvasBox.width)}x${Math.round(canvasBox.height)}`);
@@ -258,6 +331,10 @@ console.log('after restore:', afterRestore);
 console.log('corrupt save state:', corruptState);
 console.log('night sleep:', sleepState);
 console.log('pet click:', petTarget.lastPetBefore, '->', petResult);
+console.log('pedia unlock:', pediaUnlock);
+console.log('pedia modal:', pediaModal);
+console.log('pedia close + place:', beforePlaceCount, '->', afterPlaceCount);
+console.log('pedia persists reload/reset:', pediaAfterReload, pediaAfterReset);
 console.log('console errors:', consoleErrors.length, consoleErrors.slice(0, 8));
 console.log('page errors:', pageErrors.length, pageErrors.slice(0, 8));
 
@@ -323,6 +400,22 @@ if (sleepState.sleeping === 0 || sleepState.total === 0) {
 }
 if (petResult.lastPet <= petTarget.lastPetBefore) {
   console.error('\n❌ clicking a dinosaur did not register a pet');
+  process.exit(1);
+}
+if (!pediaUnlock.raptorSeen || !pediaUnlock.toastShown || !pediaUnlock.badgeOn) {
+  console.error('\n❌ pedia unlock (seen/toast/badge) failed');
+  process.exit(1);
+}
+if (!pediaModal.visible || pediaModal.cards !== 7 || pediaModal.locked !== 6 || !pediaModal.badgeCleared) {
+  console.error('\n❌ pedia modal cards/silhouettes/badge state wrong');
+  process.exit(1);
+}
+if (!beforePlaceCount.modalHidden || afterPlaceCount <= beforePlaceCount.entities) {
+  console.error('\n❌ game did not continue normally after closing pedia');
+  process.exit(1);
+}
+if (!pediaAfterReload || !pediaAfterReset) {
+  console.error('\n❌ pedia unlocks did not survive reload / world reset');
   process.exit(1);
 }
 console.log('\n✅ SMOKE TEST PASSED');

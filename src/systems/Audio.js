@@ -271,6 +271,15 @@ export class Audio {
     );
   }
 
+  // 图鉴解锁：较长的上行琶音，最后的高音 C 保持余韵
+  playUnlock() {
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((f, i) =>
+      this._tone(f, 0.24, { type: 'triangle', peak: 0.11, when: i * 0.12, echo: true })
+    );
+    this._tone(1046.5, 1.0, { type: 'sine', peak: 0.1, when: notes.length * 0.12, echo: true });
+  }
+
   // 昼夜切换：柔和的“呼”一声
   playWhoosh() {
     if (!this.ctx) return;

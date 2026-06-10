@@ -20,6 +20,7 @@ export const ACTIONS = [
   { id: 'daynight', icon: '🌗', label: 'action.daynight' },
   { id: 'rain', icon: '🌧️', label: 'action.rain' },
   { id: 'rainbow', icon: '🌈', label: 'action.rainbow' },
+  { id: 'pedia', icon: '📖', label: 'action.pedia' },
 ];
 
 export class Tools {

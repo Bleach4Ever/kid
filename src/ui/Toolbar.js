@@ -34,6 +34,7 @@ export class Toolbar {
     this.tools = tools;
     this.audio = audio;
     this.buttons = {};
+    this.actionBtns = {};
     this._allBtns = [];
 
     const bottom = document.getElementById('toolbar');
@@ -59,6 +60,7 @@ export class Toolbar {
         onAction(a.id);
       });
       top.appendChild(b);
+      this.actionBtns[a.id] = b;
       this._allBtns.push(b);
     }
 
@@ -84,6 +86,11 @@ export class Toolbar {
 
     onLangChange(() => this.refreshLabels());
     this._highlight();
+  }
+
+  // 顶部动作按钮的“未读”脉冲红点（如图鉴有新解锁）
+  setBadge(id, on) {
+    this.actionBtns[id]?.classList.toggle('has-badge', !!on);
   }
 
   refreshLabels() {
