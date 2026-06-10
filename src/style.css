@@ -366,6 +366,69 @@ body {
   transition: transform 0.8s cubic-bezier(0.5, -0.15, 0.55, 1), opacity 0.8s ease;
 }
 
+/* 卡通时钟（左下角）：表盘 + 指针 + 数字，帮孩子认识时间。纯展示，不挡点击 */
+.clock {
+  position: fixed;
+  left: 12px;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px;
+  border: 2px solid #fff;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 0 0 2px var(--candy-blue), 0 5px 14px var(--shadow);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+.clock-face {
+  width: 84px;
+  height: 84px;
+  display: block;
+}
+.clock-dial {
+  fill: #fffdf6;
+  stroke: var(--candy-blue);
+  stroke-width: 3;
+}
+.clock-num {
+  font-family: var(--font-candy);
+  font-size: 11px;
+  font-weight: 800;
+  fill: var(--ink);
+}
+.clock-hour {
+  stroke: #5a4a6a;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+.clock-min {
+  stroke: #ff8a78;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+}
+.clock-pin {
+  fill: #5a4a6a;
+}
+.clock-readout {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-candy);
+  font-weight: 800;
+  color: var(--ink);
+}
+.clock-icon {
+  font-size: 16px;
+}
+.clock-digital {
+  font-size: 20px;
+  letter-spacing: 1px;
+}
+
 /* “贴纸”按钮：3px 白描边 + 类别色光环 + 弹性过渡；无类别按钮用淡紫光环 */
 .tool-btn {
   --cat: #d9c8ea;
@@ -540,6 +603,23 @@ body {
     top: max(108px, calc(env(safe-area-inset-top) + 96px));
     padding: 6px 10px;
     font-size: 12px;
+  }
+
+  /* 窄屏：缩小时钟并抬到工具栏上方，避免与居中工具栏重叠 */
+  .clock {
+    bottom: calc(max(14px, env(safe-area-inset-bottom)) + 96px);
+    padding: 6px;
+    gap: 2px;
+  }
+  .clock-face {
+    width: 60px;
+    height: 60px;
+  }
+  .clock-icon {
+    font-size: 13px;
+  }
+  .clock-digital {
+    font-size: 16px;
   }
 }
 
@@ -1506,6 +1586,30 @@ body {
     opacity: 0;
   }
   50% {
+    opacity: 0.5;
+  }
+}
+
+/* 雷暴闪电：白色双闪，短促不刺眼（5 岁友好） */
+#sky-flash.lightning {
+  background: #f4f8ff;
+}
+#sky-flash.lightning.flash {
+  animation: sky-lightning 0.5s ease;
+}
+
+@keyframes sky-lightning {
+  0%,
+  100% {
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.7;
+  }
+  24% {
+    opacity: 0.1;
+  }
+  38% {
     opacity: 0.5;
   }
 }

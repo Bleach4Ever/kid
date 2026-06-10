@@ -59,6 +59,7 @@ export class Audio {
     this.sfxVol = clamp01(profile.get('sfxVol', 0.9));
     this._lastDig = 0;
     this._lastCry = 0;
+    this._lastThunder = 0;
     this.rainNode = null;
     this.mood = MOODS.day;
     // 切后台暂停一切声音与调度，回来再恢复（避免堆积的 interval 重复调度）
@@ -379,6 +380,38 @@ export class Audio {
     g.gain.linearRampToValueAtTime(0.0001, this.ctx.currentTime + 0.4);
     src.stop(this.ctx.currentTime + 0.5);
     this.rainNode = null;
+  }
+
+  // 雷声：低频滤波噪声“轰”——软起音、无尖锐爆裂，温柔不吓 5 岁孩子；限流 ≥2s
+  playThunder() {
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
+    if (now - this._lastThunder < 2) return;
+    this._lastThunder = now;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this._noiseBuffer();
+    src.loop = true;
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(180, now);
+    lp.frequency.exponentialRampToValueAtTime(70, now + 1.1);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.linearRampToValueAtTime(0.14, now + 0.18); // 软起音，不是尖锐的“咔”
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+    src.connect(lp);
+    lp.connect(g);
+    g.connect(this.sfxGain);
+    src.start(now);
+    src.stop(now + 1.3);
+    this._tone(55, 1.0, { type: 'sine', peak: 0.1 }); // 一记很低的正弦给“身体感”
+  }
+
+  // 点海洋生物：温柔的“咕噜”气泡音 + 一点高音亮片
+  playBlub() {
+    if (!this.ctx) return;
+    this._tone(420, 0.12, { type: 'sine', peak: 0.1, slideTo: 640 });
+    this._tone(880, 0.1, { type: 'sine', peak: 0.06, when: 0.06, slideTo: 1100, echo: true });
   }
 
   click() {

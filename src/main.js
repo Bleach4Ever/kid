@@ -27,6 +27,10 @@ import { createDinosaur, SPECIES } from './entities/Dinosaur.js';
 import { createEgg, createNest as createNestEntity, createPoop, createMysteryEgg } from './entities/Ecosystem.js';
 import { rollVariant, VARIANTS } from './entities/Variants.js';
 import { MysteryEggs } from './systems/MysteryEggs.js';
+import { SeaLife } from './systems/SeaLife.js';
+import { SEA_BUILDERS, SEABED_KINDS, deepWaterTarget } from './entities/SeaCreatures.js';
+import { TimeOfDay } from './systems/TimeOfDay.js';
+import { Clock } from './ui/Clock.js';
 import { LIMITS, SEA_LEVEL } from './constants.js';
 
 // ---------------- 语言（先于一切 UI） ----------------
@@ -94,18 +98,20 @@ stage.scene.add(water.mesh);
 const sky = new Sky(stage.scene, { sun: stage.sun, hemi: stage.hemi, ambient: stage.ambient });
 const audio = new Audio();
 const tools = new Tools();
-const weather = new Weather(stage.scene, terrain);
+const bus = new Bus();
+// 连续昼夜时钟（唯一时间真相源）：Sky/Weather/Clock 都从它读取
+const timeOfDay = new TimeOfDay(bus);
+// 天气已全自动：构造时注入 sky（压暗）/audio（雷声）/bus（闪电）
+const weather = new Weather(stage.scene, terrain, { sky, audio, bus });
 // 性能分级：按 profile（auto/high/low）立即应用像素比/阴影/雨量/恐龙上限。
 // onChange 构造后再挂：构造期间 quality 还在 TDZ，updatePopulationStatus 不能引用它
 const quality = new Quality({ stage, weather });
 quality.onChange = () => updatePopulationStatus(); // 上限随档位变化 → 刷新计数标签
-const bus = new Bus();
 const particles = new Particles(stage.scene);
 // ensureNight / placeEntity 都是函数声明（提升），这里先引用没问题
 const worldEvents = new WorldEvents({
   scene: stage.scene, terrain, sky, particles, stage, ensureNight, placeEntity,
 });
-const SKY_PHASES = ['day', 'sunset', 'night'];
 
 // ---------------- 实体管理（树/花/恐龙） ----------------
 const entities = [];
@@ -348,6 +354,20 @@ const mysteryEggs = new MysteryEggs({
   },
 });
 
+// 海洋生物：在深水里建一只并入世界（无深水返回 null），数量由 SeaLife 调度器维持
+function spawnSeaCreature(kind) {
+  const point = deepWaterTarget(terrain);
+  const builder = SEA_BUILDERS[kind];
+  if (!point || !builder) return null;
+  const wrapper = builder();
+  const y = SEABED_KINDS.has(kind)
+    ? terrain.getHeightAt(point.x, point.z) + 0.05
+    : SEA_LEVEL - 0.45;
+  addEntity(wrapper, new THREE.Vector3(point.x, y, point.z));
+  return wrapper;
+}
+const seaLife = new SeaLife({ terrain, quality, spawnCreature: spawnSeaCreature });
+
 function spawnPoop(dinosaur) {
   const direction = new THREE.Vector3(0, 0, -1)
     .applyQuaternion(dinosaur.object3d.quaternion)
@@ -367,6 +387,7 @@ function applyWorldPreset(preset) {
   currentPreset = PRESET_ENTITIES[preset] ? preset : 'park';
   clearEntities();
   terrain.generate(currentPreset);
+  seaLife?.setPreset(); // 重新探测深水，海洋生物随新地形重新生成
   for (const [kind, x, z] of PRESET_ENTITIES[currentPreset]) {
     placePresetEntity(kind, x, z);
   }
@@ -380,6 +401,7 @@ function snapshotWorld() {
   const saved = [];
   for (const e of entities) {
     if (!e.alive || e.consumed) continue;
+    if (e.isSeaLife) continue; // 环境海洋生物不入档：下次进入世界自动重新生成
     const { x, z } = e.object3d.position;
     if (e.kind === 'tree' || e.kind === 'flower') {
       saved.push({ k: e.kind, x: r(x), z: r(z) });
@@ -392,7 +414,8 @@ function snapshotWorld() {
   }
   return {
     preset: currentPreset,
-    skyIndex: sky.idx,
+    skyIndex: timeOfDay.phaseIndex, // 旧字段保留：向后兼容只读旧档时的映射
+    timeOfDay: timeOfDay.serialize(),
     heights: terrain.exportHeights(),
     entities: saved,
   };
@@ -408,8 +431,11 @@ function restoreWorld(save) {
   clearEntities();
   terrain.generate(currentPreset); // 兜底：高度数据异常时仍是完整预设地形
   if (save.heights) terrain.applyHeights(save.heights);
-  sky.setIndex(save.skyIndex);
-  syncSkyPhase();
+  // 时间：新档有 timeOfDay；旧档只有 skyIndex(0白天/1黄昏/2夜晚) → 映射到合理时刻
+  if (Number.isFinite(save.timeOfDay)) timeOfDay.restore(save.timeOfDay);
+  else timeOfDay.restore(({ 0: 8, 1: 18, 2: 22 })[save.skyIndex] ?? 8);
+  sky.snapTo(timeOfDay.hour); // 读档直达，不从白天淡入
+  seaLife.setPreset();
   let restoredDinos = aliveDinoCount(); // clearEntities 后应为 0，仍以实际计数为准
   for (const rec of save.entities) {
     if (rec.k === 'tree' || rec.k === 'flower') {
@@ -455,25 +481,26 @@ const input = new Input({
   water,
   tools,
   actions,
-  // pointerdown 时构建一次活恐龙列表（≤100 只，很便宜）；空中翼龙 v1 不可摸；
-  // 神秘蛋也算可点目标（点一下 = 开启）
+  // pointerdown 时构建一次可点目标列表；空中翼龙 v1 不可摸；
+  // 神秘蛋（点一下 = 开启）与海洋生物（点一下 = 可爱反应）也算可点目标
   getPetTargets: () => entities
-    .filter((e) => ((e.isDinosaur && !e.flying) || e.isMysteryEgg) && e.alive && !e.consumed)
+    .filter((e) => ((e.isDinosaur && !e.flying) || e.isMysteryEgg || e.isSeaLife) && e.alive && !e.consumed)
     .map((e) => e.object3d),
 });
 
 // ---------------- 顶部动作 ----------------
-function syncSkyPhase() {
-  ctx.skyPhase = SKY_PHASES[sky.idx] || 'day';
-  audio.setMood(ctx.skyPhase);
-  bus.emit('skyphase', { phase: ctx.skyPhase });
-}
+// 相位（白天/黄昏/夜晚）随连续时间在边界处由 TimeOfDay 广播 'skyphase'；
+// 这里统一更新 ctx.skyPhase（恐龙睡觉读它）与 BGM 情绪。
+bus.on('skyphase', ({ phase }) => {
+  ctx.skyPhase = phase;
+  audio.setMood(phase);
+});
 
-// 世界事件需要夜空时（流星雨/极光）循环到夜晚并同步 skyPhase/BGM/总线
+// 世界事件需要夜空时（流星雨/极光）：直接把时间跳到夜里并直达夜空
 function ensureNight() {
-  while (ctx.skyPhase !== 'night') {
-    sky.cycle();
-    syncSkyPhase();
+  if (timeOfDay.getPhase() !== 'night') {
+    timeOfDay.setHour(21.5); // 触发 'skyphase' → ctx.skyPhase 同步为 night
+    sky.snapTo(timeOfDay.hour);
   }
 }
 
@@ -483,23 +510,28 @@ const EVENT_IDS = new Set(['flowerRain', 'meteor', 'aurora', 'volcano']);
 const skyFlash = document.createElement('div');
 skyFlash.id = 'sky-flash';
 document.body.appendChild(skyFlash);
-skyFlash.addEventListener('animationend', () => skyFlash.classList.remove('flash'));
+skyFlash.addEventListener('animationend', () => skyFlash.classList.remove('flash', 'lightning'));
 
 function flashSky(phase) {
+  skyFlash.classList.remove('flash', 'lightning');
   skyFlash.classList.toggle('cool', phase === 'night');
-  skyFlash.classList.remove('flash');
   void skyFlash.offsetWidth; // 重启动画
   skyFlash.classList.add('flash');
 }
 
+// 雷暴闪电：极短的白色全屏脉冲（装饰、pointer-events:none，不吓人）
+bus.on('lightning', () => {
+  skyFlash.classList.remove('flash', 'cool');
+  skyFlash.classList.add('lightning');
+  void skyFlash.offsetWidth;
+  skyFlash.classList.add('flash');
+});
+
 function onAction(id) {
   if (id === 'daynight') {
-    sky.cycle();
-    syncSkyPhase();
-    flashSky(ctx.skyPhase);
+    timeOfDay.fastForward(3.5); // 快进时间 +3.5 小时（跨相位时自动广播 'skyphase'）
+    flashSky(timeOfDay.getPhase());
     audio.playWhoosh();
-  } else if (id === 'rain') {
-    weather.toggleRain(audio);
   } else if (id === 'rainbow') {
     weather.showRainbow(audio);
   } else if (EVENT_IDS.has(id)) {
@@ -516,8 +548,8 @@ function resetWorld() {
   applyWorldPreset(currentPreset);
   weather.reset(audio);
   worldEvents.reset();
-  sky.reset();
-  syncSkyPhase();
+  timeOfDay.restore(8); // 回到早上 8 点（当前非白天则自动广播 'skyphase'）
+  sky.snapTo(8);
   saveWorld(); // 重置完成立即覆盖存档
 }
 
@@ -584,6 +616,7 @@ const ctx = {
   bus,
   particles,
   skyPhase: 'day',
+  hour: 8, // 当前小时，每帧从 timeOfDay 同步（天气调度读它判断清晨/夜晚）
   removeEntity: requestRemove,
   createNest,
   layEgg,
@@ -591,19 +624,24 @@ const ctx = {
   spawnPoop,
   time: 0,
 };
-const clock = new THREE.Clock();
+const clock = new Clock(timeOfDay); // 左下角卡通时钟（表盘 + 数字）
+const frameClock = new THREE.Clock();
 
 function loop() {
   // 上下文丢失期间跳过整帧（含渲染），rAF 不断 → restored 后下一帧自动继续
   if (!paused) {
-    const dt = Math.min(clock.getDelta(), 0.05);
+    const dt = Math.min(frameClock.getDelta(), 0.05);
     ctx.time += dt;
+    if (gameStarted) timeOfDay.advance(dt); // 开始页期间时间冻结在 8:00
+    ctx.hour = timeOfDay.hour;
     input.update();
     water.update(ctx.time);
-    sky.update(dt, ctx.time);
-    weather.update(dt);
+    sky.update(dt, timeOfDay.hour);
+    weather.update(dt, ctx);
+    clock.update();
     worldEvents.update(dt);
     if (gameStarted) mysteryEggs.update(dt); // 开始页期间不投放神秘蛋
+    if (gameStarted) seaLife.update(dt); // 开始页期间不刷海洋生物
     particles.update(dt);
     for (const e of entities) e.update(dt, ctx);
     flushRemovals();
@@ -643,6 +681,9 @@ window.__world = {
   profile,
   unlocksSys,
   mysteryEggs,
+  seaLife,
+  timeOfDay,
+  clock,
   variants: { roll: rollVariant, VARIANTS },
   seaLevel: SEA_LEVEL,
   lastPet: 0, // 调试计数：冒烟测试验证“点恐龙=抚摸”

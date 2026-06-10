@@ -43,7 +43,7 @@ export class Input {
     return hits.length ? hits[0] : null;
   }
 
-  // 命中可抚摸的恐龙时返回其 wrapper；被地形挡住（恐龙更远）则不算
+  // 命中可抚摸的目标时返回其 wrapper；被地形/海面挡住（目标更远）则不算
   _petHit(cx, cy) {
     if (!this.getPetTargets) return null;
     const targets = this.getPetTargets();
@@ -51,11 +51,15 @@ export class Input {
     this._setRay(cx, cy);
     const hits = this.ray.intersectObjects(targets, true);
     if (!hits.length) return null;
-    const ground = this.ray.intersectObjects(this.targets, false);
-    if (ground.length && ground[0].distance < hits[0].distance) return null;
     let obj = hits[0].object;
     while (obj && !obj.userData.entity) obj = obj.parent;
-    return obj ? obj.userData.entity : null;
+    const entity = obj ? obj.userData.entity : null;
+    if (!entity) return null;
+    // 遮挡判定：半透明海面不该挡住水里的海洋生物（隔水也能点鱼），故海洋生物只用地形当遮挡
+    const occluders = entity.isSeaLife ? [this.terrain.mesh] : this.targets;
+    const ground = this.ray.intersectObjects(occluders, false);
+    if (ground.length && ground[0].distance < hits[0].distance) return null;
+    return entity;
   }
 
   _down(e) {

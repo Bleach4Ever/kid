@@ -10,8 +10,14 @@ export const MIN_HEIGHT = -5; // 海底最低高度
 export const DINO_CAP = 100;
 
 // 只限制可大量刷出的装饰实体。蛋和巢穴不设硬上限。
+// 海洋生物（环境点缀）也设硬上限，数量由 SeaLife 调度器按画质档位维持。
 export const LIMITS = {
   tree: 120,
   flower: 160,
   poop: 80,
+  fish: 6,
+  jelly: 6,
+  turtle: 2,
+  crab: 6,
+  starfish: 8,
 };

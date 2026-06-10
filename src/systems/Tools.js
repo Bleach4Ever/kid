@@ -27,9 +27,9 @@ export const DINO_TOOLS = Object.keys(SPECIES)
 export const TOOLS = [...BASE_TOOLS, ...DINO_TOOLS];
 
 // 点一下立刻触发的动作（顶部按钮）；✨ 是魔法面板的开关
+// 天气已全自动，去掉手动「下雨」按钮；昼夜按钮改为「快进时间」（时间本身自动推进）。
 export const ACTIONS = [
-  { id: 'daynight', icon: '🌗', label: 'action.daynight' },
-  { id: 'rain', icon: '🌧️', label: 'action.rain' },
+  { id: 'daynight', icon: '⏩', label: 'action.daynight' },
   { id: 'magic', icon: '✨', label: 'action.magic' },
   { id: 'pedia', icon: '📖', label: 'action.pedia' },
   { id: 'settings', icon: '⚙️', label: 'action.settings' },
