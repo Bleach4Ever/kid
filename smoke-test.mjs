@@ -56,13 +56,31 @@ await page.evaluate(() => {
     }
   }
 });
-// 全部 15 个物种 + 树/花，按钮用 data-tool 定位（不依赖顺序）
-const placeTools = await page.evaluate(() =>
-  [...document.querySelectorAll('#toolbar .tool-btn')]
-    .map((b) => b.dataset.tool)
-    .filter((id) => !['mountain', 'ocean'].includes(id)));
-for (const t of placeTools) {
+// 树/花走底栏；恐龙在 🦕 抽屉里：初始 7 个物种走 UI（每次选完抽屉自动收起，要重开）
+for (const t of ['tree', 'flower']) {
   await page.locator(`#toolbar .tool-btn[data-tool="${t}"]`).click({ force: true });
+  await page.mouse.click(520, 380);
+  await page.waitForTimeout(80);
+}
+// 抽屉初始状态：15 个按钮，6 个锁定剪影（里程碑），2 个隐藏（神秘蛋专属）
+await page.locator('#toolbar .tool-btn[data-tool="dinos"]').click({ force: true });
+await page.waitForTimeout(350);
+const dinoBarState = await page.evaluate(() => {
+  const bar = document.getElementById('dino-bar');
+  const btns = [...bar.querySelectorAll('.tool-btn')];
+  return {
+    open: bar.classList.contains('open'),
+    total: btns.length,
+    locked: btns.filter((b) => b.classList.contains('locked')).length,
+    hidden: btns.filter((b) => b.classList.contains('hidden-tool')).length,
+    hints: btns.filter((b) => b.querySelector('.lock-hint')).length,
+    unlockedIds: btns.filter((b) => !b.classList.contains('locked')).map((b) => b.dataset.tool),
+  };
+});
+for (const t of dinoBarState.unlockedIds) {
+  await page.locator('#toolbar .tool-btn[data-tool="dinos"]').click({ force: true });
+  await page.waitForTimeout(150);
+  await page.locator(`#dino-bar .tool-btn[data-tool="${t}"]`).click({ force: true });
   await page.mouse.click(520, 380);
   await page.evaluate(() => {
     const w = window.__world;
@@ -71,6 +89,29 @@ for (const t of placeTools) {
   });
   await page.waitForTimeout(80);
 }
+// 锁定物种绕过 UI 直接放置（引擎层不设限，UI 层才是闸门）
+await page.evaluate(() => {
+  const w = window.__world;
+  const locked = ['ankylosaurus', 'parasaurolophus', 'pachycephalosaurus', 'dilophosaurus',
+    'diplodocus', 'spinosaurus', 'therizinosaurus', 'mosasaurus'];
+  locked.forEach((s, i) => {
+    w.placeEntity({ x: 5, z: 5 }, s);
+    const last = w.entities[w.entities.length - 1];
+    if (last?.isDinosaur && !last.flying && !last.swimming) {
+      last.object3d.position.set(-14 + (i % 4) * 2, 0, -10 + Math.floor(i / 4) * 2);
+    }
+  });
+});
+// 点一个锁定按钮：不选中、只抖动
+await page.locator('#toolbar .tool-btn[data-tool="dinos"]').click({ force: true });
+await page.waitForTimeout(350);
+await page.locator('#dino-bar .tool-btn[data-tool="spinosaurus"]').click({ force: true });
+const lockedClick = await page.evaluate(() => {
+  const b = document.querySelector('#dino-bar .tool-btn[data-tool="spinosaurus"]');
+  return { denied: b.classList.contains('deny'), selected: b.classList.contains('selected') };
+});
+await page.locator('#toolbar .tool-btn[data-tool="dinos"]').click({ force: true }); // 收起抽屉
+await page.waitForTimeout(200);
 // 冻结生态：15 只挤在角落会互吃；之后的进食测试再精确解锁个别恐龙
 await page.evaluate(() => {
   for (const e of window.__world.entities) {
@@ -309,7 +350,9 @@ await page.evaluate(() => {
     }
   }
 });
-await page.locator('#toolbar .tool-btn[data-tool="raptor"]').click({ force: true }); // 迅猛龙
+await page.locator('#toolbar .tool-btn[data-tool="dinos"]').click({ force: true }); // 打开 🦕 抽屉
+await page.waitForTimeout(350);
+await page.locator('#dino-bar .tool-btn[data-tool="raptor"]').click({ force: true }); // 迅猛龙
 await page.mouse.click(520, 380);
 await page.waitForTimeout(250);
 const pediaUnlock = await page.evaluate(() => ({
@@ -486,6 +529,28 @@ const volcanoState = await page.evaluate(() => {
 // 事件结束后渲染仍正常
 await page.waitForTimeout(400);
 const finalTriangles = await page.evaluate(() => window.__world.stage.renderer.info.render.triangles);
+
+// ---------------- 物种解锁里程碑 ----------------
+// 合成 bus 事件：养大 3 只食草龙 → 甲龙解锁（toast + unlocks + 抽屉刷新）；计数器跨 reload 持久
+const unlockBefore = await page.evaluate(() => {
+  const w = window.__world;
+  const btn = document.querySelector('#dino-bar .tool-btn[data-tool="ankylosaurus"]');
+  const wasLocked = btn.classList.contains('locked');
+  for (let i = 0; i < 3; i++) w.bus.emit('raised', { species: 'triceratops' });
+  const p = JSON.parse(localStorage.getItem('dino-world:profile'));
+  return {
+    wasLocked,
+    nowLocked: btn.classList.contains('locked'),
+    unlocks: p.unlocks,
+    raisedHerb: p.counters.raisedHerb,
+  };
+});
+await page.reload({ waitUntil: 'networkidle' });
+const unlockAfterReload = await page.evaluate(() => ({
+  raisedHerb: window.__world.profile.get('counters').raisedHerb,
+  ankylosaurusUnlocked: !document.querySelector('#dino-bar .tool-btn[data-tool="ankylosaurus"]').classList.contains('locked'),
+  mosasaurusHidden: document.querySelector('#dino-bar .tool-btn[data-tool="mosasaurus"]').classList.contains('hidden-tool'),
+}));
 
 // ---------------- Profile v1 → v2 迁移 ----------------
 // 写入带图鉴印章的 v1 档案 → 加载后 counters 慷慨回填（老玩家进度不清零）
@@ -719,6 +784,9 @@ console.log('entities placed:', entityCount);
 console.log('herbivore feeding:', herbivoreBefore, '->', herbivoreAfter);
 console.log('dinosaur state:', dinosaurState);
 console.log('mosasaurus swim:', mosasaurState);
+console.log('dino drawer:', dinoBarState);
+console.log('locked click denied:', lockedClick);
+console.log('species unlock milestone:', unlockBefore, '-> after reload:', unlockAfterReload);
 console.log('profile v1->v2 migration:', migrated);
 console.log('i18n switch:', i18nState, ' after reload:', i18nAfterReload);
 console.log('heights codec roundtrip ok:', codecOk);
@@ -802,8 +870,26 @@ if (entityCount < 17 || dinosaurState.species.length < 14) {
   console.error('\n❌ dinosaurs were not placed (15 species expected)');
   process.exit(1);
 }
-if (!splashHidden || toolCount !== 19 || topCount !== 7) {
+if (!splashHidden || toolCount !== 5 || topCount !== 7) {
   console.error('\n❌ UI not wired correctly');
+  process.exit(1);
+}
+if (!dinoBarState.open || dinoBarState.total !== 15 || dinoBarState.locked !== 8 ||
+    dinoBarState.hidden !== 2 || dinoBarState.hints !== 6 || dinoBarState.unlockedIds.length !== 7) {
+  console.error('\n❌ dino drawer initial lock state wrong', dinoBarState);
+  process.exit(1);
+}
+if (!lockedClick.denied || lockedClick.selected) {
+  console.error('\n❌ locked species button should deny, not select', lockedClick);
+  process.exit(1);
+}
+if (!unlockBefore.wasLocked || unlockBefore.nowLocked ||
+    !unlockBefore.unlocks.includes('dino.ankylosaurus') || unlockBefore.raisedHerb < 3) {
+  console.error('\n❌ raisedHerb milestone did not unlock ankylosaurus', unlockBefore);
+  process.exit(1);
+}
+if (unlockAfterReload.raisedHerb < 3 || !unlockAfterReload.ankylosaurusUnlocked || !unlockAfterReload.mosasaurusHidden) {
+  console.error('\n❌ unlock/counters did not persist across reload', unlockAfterReload);
   process.exit(1);
 }
 if (!mosasaurState.exists || !mosasaurState.water || !mosasaurState.swimming || !mosasaurState.nearSurface) {
@@ -932,12 +1018,7 @@ if (finalTriangles < 1000) {
   console.error('\n❌ rendering broken after world events');
   process.exit(1);
 }
-const EXPECTED_CATS = [
-  'earth', 'earth', 'plant', 'plant',
-  'herb', 'herb', 'herb', 'herb', 'herb', 'herb', 'herb', 'herb',
-  'carn', 'carn', 'carn', 'carn',
-  'special', 'special', 'special',
-];
+const EXPECTED_CATS = ['earth', 'earth', 'plant', 'plant', 'herb'];
 if (JSON.stringify(tutStart.dataCats) !== JSON.stringify(EXPECTED_CATS)) {
   console.error('\n❌ toolbar data-cat attributes wrong');
   process.exit(1);

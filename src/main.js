@@ -21,6 +21,7 @@ import { encodeHeightsI16, decodeHeightsI16 } from './systems/Storage.js';
 import { loadSave, clearSave, serializeWorld, hasSave } from './systems/SaveGame.js';
 import { initLang, t, setLang, getLang, onLangChange, applyDom } from './i18n.js';
 import { profile } from './systems/Profile.js';
+import { Unlocks } from './systems/Unlocks.js';
 import { createTree, createFlower } from './entities/Tree.js';
 import { createDinosaur, SPECIES } from './entities/Dinosaur.js';
 import { createEgg, createNest as createNestEntity, createPoop } from './entities/Ecosystem.js';
@@ -472,8 +473,13 @@ const toolbar = new Toolbar({ tools, audio, onAction, onReset: resetWorld });
 const pedia = new Pedia({ bus, audio, toolbar });
 const settings = new Settings({ audio, quality });
 const quests = new Quests({ bus, audio });
+const unlocksSys = new Unlocks({ bus, audio });
 const tutorial = new Tutorial({ bus, audio, particles, toolbar });
-bus.on('unlock', () => toolbar.refreshMagic()); // 星星里程碑解锁 → 魔法面板即时刷新
+// 解锁（星星里程碑/物种里程碑）→ 魔法面板 + 恐龙抽屉即时刷新
+bus.on('unlock', () => {
+  toolbar.refreshMagic();
+  toolbar.refreshDinos();
+});
 
 // ---------------- 开始（解锁声音） ----------------
 const splash = document.getElementById('splash');
@@ -582,6 +588,7 @@ window.__world = {
   weather,
   worldEvents,
   profile,
+  unlocksSys,
   seaLevel: SEA_LEVEL,
   lastPet: 0, // 调试计数：冒烟测试验证“点恐龙=抚摸”
 };

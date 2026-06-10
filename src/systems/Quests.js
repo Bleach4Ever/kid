@@ -4,6 +4,7 @@
 // 星星里程碑自动解锁惊喜（无商店）：本阶段只写 unlocks + 吐司，egg.golden 立即生效。
 import { SPECIES } from '../entities/Dinosaur.js';
 import { setFancyEggs } from '../entities/Ecosystem.js';
+import { isSpeciesUnlocked } from './Unlocks.js';
 import { profile } from './Profile.js';
 import { showToast } from '../ui/Toast.js';
 import { t, onLangChange } from '../i18n.js';
@@ -64,7 +65,8 @@ export class Quests {
   }
 
   _start(tpl, forcedSpecies) {
-    const ids = Object.keys(SPECIES);
+    // 只给已解锁的物种出任务（锁定的放不出来，任务会卡死）
+    const ids = Object.keys(SPECIES).filter(isSpeciesUnlocked);
     const quest = {
       tplId: tpl.id,
       species: tpl.species ? forcedSpecies || ids[(Math.random() * ids.length) | 0] : null,

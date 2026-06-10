@@ -1,6 +1,9 @@
-import { TOOLS, ACTIONS, MAGIC_ACTIONS } from '../systems/Tools.js';
+import { BASE_TOOLS, DINO_TOOLS, ACTIONS, MAGIC_ACTIONS } from '../systems/Tools.js';
 import { profile } from '../systems/Profile.js';
+import { isSpeciesUnlocked, lockHint, MYSTERY_ONLY } from '../systems/Unlocks.js';
 import { t, onLangChange } from '../i18n.js';
+
+const DINO_IDS = new Set(DINO_TOOLS.map((d) => d.id));
 
 function makeBtn(icon, labelKey, small) {
   const b = document.createElement('button');
@@ -39,19 +42,68 @@ export class Toolbar {
     this._allBtns = [];
 
     const bottom = document.getElementById('toolbar');
-    for (const t of TOOLS) {
+    for (const t of BASE_TOOLS) {
       const b = makeBtn(t.icon, t.label, false);
       b.dataset.tool = t.id; // 测试与样式都用 id 定位，不依赖按钮顺序
       if (t.cat) b.dataset.cat = t.cat; // CSS 按类别着色 + 类别间隙
       b.addEventListener('click', () => {
         audio.click();
         tools.select(t.id);
+        this.toggleDinos(false);
         this._highlight();
       });
       bottom.appendChild(b);
       this.buttons[t.id] = b;
       this._allBtns.push(b);
     }
+
+    // 🦕 恐龙抽屉开关：选中恐龙工具时镜像它的图标
+    this.dinoToggle = makeBtn('🦕', 'tool.dinos', false);
+    this.dinoToggle.dataset.tool = 'dinos';
+    this.dinoToggle.dataset.cat = 'herb';
+    this.dinoToggle.addEventListener('click', () => {
+      audio.click();
+      this.toggleDinos();
+    });
+    bottom.appendChild(this.dinoToggle);
+    this.buttons.dinos = this.dinoToggle;
+    this._allBtns.push(this.dinoToggle);
+
+    // 恐龙抽屉面板：全部物种按钮一次性创建，锁定的灰剪影 + 提示角标
+    this.dinoBar = document.getElementById('dino-bar');
+    this.dinoBtns = [];
+    for (const d of DINO_TOOLS) {
+      const b = makeBtn(d.icon, d.label, false);
+      b.dataset.tool = d.id;
+      b.dataset.cat = d.cat;
+      b._species = d.id;
+      const hint = lockHint(d.id);
+      if (hint) {
+        const badge = document.createElement('i');
+        badge.className = 'lock-hint';
+        badge.textContent = hint;
+        b.appendChild(badge);
+      }
+      b.addEventListener('click', () => {
+        if (b.classList.contains('locked')) {
+          // 还没解锁：轻 squeak + 抖一抖，提示角标已经说明了怎么解锁
+          audio.playSqueak();
+          b.classList.remove('deny');
+          void b.offsetWidth;
+          b.classList.add('deny');
+          return;
+        }
+        audio.click();
+        tools.select(d.id);
+        this.toggleDinos(false);
+        this._highlight();
+      });
+      this.dinoBar.appendChild(b);
+      this.buttons[d.id] = b;
+      this.dinoBtns.push(b);
+      this._allBtns.push(b);
+    }
+    this.refreshDinos();
 
     const top = document.getElementById('top-bar');
     for (const a of ACTIONS) {
@@ -120,6 +172,19 @@ export class Toolbar {
     this.magicBar.classList.toggle('open');
   }
 
+  toggleDinos(force) {
+    this.dinoBar.classList.toggle('open', force);
+  }
+
+  // 解锁变化时刷新抽屉：里程碑物种灰剪影可见，神秘蛋专属物种解锁前隐藏
+  refreshDinos() {
+    for (const b of this.dinoBtns) {
+      const unlocked = isSpeciesUnlocked(b._species);
+      b.classList.toggle('locked', !unlocked);
+      b.classList.toggle('hidden-tool', !unlocked && MYSTERY_ONLY.has(b._species));
+    }
+  }
+
   // 解锁变化时刷新可见按钮（面板开着也即时生效）
   refreshMagic() {
     const unlocks = profile.get('unlocks', []);
@@ -138,6 +203,21 @@ export class Toolbar {
   _highlight() {
     for (const id in this.buttons) {
       this.buttons[id].classList.toggle('selected', id === this.tools.currentId);
+    }
+    // 🦕 开关镜像当前选中的恐龙（图标 + 选中态），方便孩子知道手里拿着谁
+    const cur = this.tools.current;
+    const isDino = cur && DINO_IDS.has(cur.id);
+    this.dinoToggle.classList.toggle('selected', !!isDino);
+    const icon = this.dinoToggle._icon;
+    if (isDino) {
+      const img = document.createElement('img');
+      img.src = cur.icon;
+      img.alt = t(cur.label);
+      img.className = 'dinosaur-icon';
+      icon.replaceChildren(img);
+    } else {
+      icon.replaceChildren();
+      icon.textContent = '🦕';
     }
   }
 }

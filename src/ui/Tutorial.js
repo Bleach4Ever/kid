@@ -27,7 +27,8 @@ export class Tutorial {
     this.steps = [
       { btn: 'mountain', gesture: 'drag', event: 'sculpt', match: () => true },
       { btn: 'tree', gesture: 'tap', event: 'place', match: (p) => p?.kind === 'tree' || p?.kind === 'flower' },
-      { btn: 'triceratops', gesture: 'tap', event: 'place', match: (p) => dino(p?.kind) },
+      // 第三步光环指向 🦕 抽屉开关（恐龙按钮都在抽屉里）
+      { btn: 'dinos', gesture: 'tap', event: 'place', match: (p) => dino(p?.kind) },
     ];
   }
 

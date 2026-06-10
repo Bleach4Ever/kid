@@ -67,7 +67,7 @@ body {
   right: 0;
   bottom: max(14px, env(safe-area-inset-bottom));
   margin-inline: auto;
-  width: min(968px, 96vw); /* 11 颗贴纸 + 4 个类别间隙刚好一行 */
+  width: fit-content; /* 4 基础工具 + 🦕 抽屉开关 */
   max-width: 96vw;
   display: flex;
   gap: 10px;
@@ -118,6 +118,71 @@ body {
 
 #magic-bar .tool-btn.locked {
   display: none;
+}
+
+/* 🦕 恐龙抽屉：从底部工具栏上方滑出，按类别分组换行 */
+#dino-bar {
+  position: fixed;
+  bottom: calc(max(14px, env(safe-area-inset-bottom)) + 108px);
+  left: 50%;
+  width: min(700px, 94vw);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(8px);
+  border-radius: 28px;
+  box-shadow: 0 8px 24px var(--shadow);
+  z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 16px) scale(0.96);
+  transition: transform 0.28s cubic-bezier(0.18, 1.4, 0.4, 1), opacity 0.2s ease;
+}
+
+#dino-bar.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, 0) scale(1);
+}
+
+/* 锁定物种：灰剪影 + 解锁提示角标；神秘蛋专属的解锁前不出现 */
+#dino-bar .tool-btn.locked .dinosaur-icon {
+  filter: brightness(0) opacity(0.35);
+}
+
+#dino-bar .tool-btn.locked .label {
+  opacity: 0.45;
+}
+
+#dino-bar .tool-btn.hidden-tool {
+  display: none;
+}
+
+.lock-hint {
+  display: none;
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  font-size: 18px;
+  font-style: normal;
+  filter: drop-shadow(0 1px 2px rgba(60, 40, 80, 0.3));
+}
+
+#dino-bar .tool-btn.locked .lock-hint {
+  display: block;
+}
+
+/* 点锁定按钮：拒绝抖动（与选中态的 wiggle 区分） */
+.tool-btn.deny {
+  animation: deny-shake 0.3s ease 2;
+}
+
+@keyframes deny-shake {
+  25% { transform: rotate(-6deg); }
+  75% { transform: rotate(6deg); }
 }
 
 .population-status {
@@ -429,6 +494,18 @@ body {
     top: max(72px, calc(env(safe-area-inset-top) + 62px));
     gap: 6px;
     padding: 6px 8px;
+  }
+
+  #dino-bar {
+    bottom: calc(max(14px, env(safe-area-inset-bottom)) + 84px);
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .lock-hint {
+    top: -8px;
+    right: -8px;
+    font-size: 14px;
   }
 
   .population-status {
