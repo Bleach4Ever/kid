@@ -99,8 +99,9 @@ export class Tutorial {
     clearTimeout(this._skipTimer);
     for (const off of this._offs) off();
     this._offs = [];
+    // 只摘光环；tut-burst 留给 _advance 的定时器收尾，最后一步的爆裂才放得完
     for (let i = 0; i < this.steps.length; i++) {
-      this._btn(i)?.classList.remove('tut-glow', 'tut-burst');
+      this._btn(i)?.classList.remove('tut-glow');
     }
     if (celebrate) {
       // 屏幕中央（约世界原点上空）彩纸庆祝
