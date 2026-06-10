@@ -73,6 +73,21 @@ export class Stage {
     window.addEventListener('resize', () => this.resize());
   }
 
+  // 性能分级（Quality.js 调用）：像素比上限 / 阴影开关 / 阴影贴图分辨率
+  applyQuality({ pixelRatioCap, shadows, shadowMapSize }) {
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, pixelRatioCap));
+    this.renderer.shadowMap.enabled = shadows;
+    if (this.sun.shadow.mapSize.x !== shadowMapSize) {
+      this.sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
+      if (this.sun.shadow.map) {
+        this.sun.shadow.map.dispose();
+        this.sun.shadow.map = null;
+      }
+    }
+    // three.js 陷阱：运行时切 shadowMap 后材质必须重编译，否则仍用旧 shader 程序
+    this.scene.traverse((o) => o.material && (o.material.needsUpdate = true));
+  }
+
   resize() {
     const w = window.innerWidth;
     const h = window.innerHeight;

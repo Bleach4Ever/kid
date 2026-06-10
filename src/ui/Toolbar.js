@@ -85,7 +85,8 @@ export class Toolbar {
     }
     this.refreshMagic();
 
-    this.soundBtn = makeBtn('🔊', '', true);
+    // 初始图标反映 profile 恢复的静音状态
+    this.soundBtn = makeBtn(audio.muted ? '🔇' : '🔊', '', true);
     this.soundBtn._titleKey = 'top.sound';
     this.soundBtn.title = t('top.sound');
     this.soundBtn.addEventListener('click', () => {

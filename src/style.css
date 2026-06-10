@@ -146,6 +146,19 @@ body {
   background: rgba(255, 200, 210, 0.92);
 }
 
+/* 恐龙到达硬上限被拒：抖一抖提示（JS 在 animationend 后移除 class） */
+.population-status.shake {
+  animation: cap-shake 0.4s ease;
+}
+
+@keyframes cap-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-7px); }
+  45% { transform: translateX(6px); }
+  70% { transform: translateX(-4px); }
+  88% { transform: translateX(2px); }
+}
+
 /* ---------------- 温和任务芯片（左上角竖排） + 星星 ---------------- */
 #quest-panel {
   position: fixed;
@@ -475,6 +488,71 @@ body {
   50% {
     transform: scale(1.35);
   }
+}
+
+/* ---------------- ⚙️ 设置面板（复用图鉴模态外壳） ---------------- */
+.settings-panel {
+  width: min(460px, 92vw);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px;
+}
+
+.settings-icon {
+  font-size: 28px;
+  width: 40px;
+  text-align: center;
+  flex: none;
+}
+
+.settings-label {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--ink);
+  width: 64px;
+  flex: none;
+}
+
+.settings-slider {
+  flex: 1;
+  height: 44px; /* 大触控目标 */
+  accent-color: #ff7aa8;
+  cursor: pointer;
+}
+
+.settings-opts {
+  flex: 1;
+  display: flex;
+  gap: 10px;
+}
+
+.settings-opt {
+  flex: 1;
+  min-height: 52px;
+  border: none;
+  border-radius: 16px;
+  background: var(--btn);
+  box-shadow: 0 4px 0 #e3d4ef;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.settings-opt:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #e3d4ef;
+}
+
+.settings-opt.selected {
+  background: #ffd9e7;
+  box-shadow: 0 4px 0 #ff9ec4;
+  color: #c4477c;
 }
 
 /* ---------------- 恐龙图鉴（贴纸书） ---------------- */

@@ -321,7 +321,7 @@ const pediaAfterReload = await page.evaluate(
 // 🔄 重置世界后解锁仍在（pedia 在 profile，不随世界存档清除）
 await page.locator('#start-btn').click();
 await page.waitForTimeout(300);
-await page.locator('#top-bar .tool-btn').nth(5).click({ force: true }); // 🔄 重置
+await page.locator('#top-bar .tool-btn').nth(6).click({ force: true }); // 🔄 重置
 await page.waitForTimeout(300);
 const pediaAfterReset = await page.evaluate(
   () => !!JSON.parse(localStorage.getItem('dino-world:profile')).pedia?.raptor?.seen
@@ -493,6 +493,84 @@ await page.locator('#start-btn').click();
 await page.waitForTimeout(1500);
 const tutNoRepeat = await page.evaluate(() => !document.getElementById('tutorial'));
 
+// ---------------- 阶段 8：设置面板 + 音量 + 性能分级 ----------------
+// ⚙️ 打开设置（top-bar 第 5 个按钮）：2 个滑条 + 2 组选项按钮
+await page.locator('#top-bar .tool-btn').nth(4).click({ force: true });
+await page.waitForTimeout(250);
+const settingsOpen = await page.evaluate(() => ({
+  visible: !document.getElementById('settings-modal').classList.contains('hidden'),
+  sliders: document.querySelectorAll('#settings-modal input[type="range"]').length,
+  optGroups: document.querySelectorAll('#settings-modal .settings-opts').length,
+}));
+
+// 两个滑条拉到 0 → unlock 后的 gain 节点应为 0，且写入 profile
+const volumeState = await page.evaluate(() => {
+  for (const s of document.querySelectorAll('#settings-modal input[type="range"]')) {
+    s.value = '0';
+    s.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  const w = window.__world;
+  const p = JSON.parse(localStorage.getItem('dino-world:profile'));
+  return {
+    music: w.audio.musicGain.gain.value,
+    sfx: w.audio.sfxGain.gain.value,
+    profileMusic: p.musicVol,
+    profileSfx: p.sfxVol,
+  };
+});
+
+// 点「低」画质 → profile.quality='low'，阴影关、像素比 ≤1、雨 drawRange 250、恐龙上限 60
+await page.locator('#settings-modal .settings-opts').first().locator('.settings-opt').nth(2).click();
+await page.waitForTimeout(200);
+const lowQuality = await page.evaluate(() => {
+  const w = window.__world;
+  return {
+    profileQuality: JSON.parse(localStorage.getItem('dino-world:profile')).quality,
+    tier: w.quality.tierName,
+    shadows: w.stage.renderer.shadowMap.enabled,
+    pixelRatio: w.stage.renderer.getPixelRatio(),
+    rainDrawRange: w.weather.rainGeo.drawRange.count,
+    dinoCap: w.quality.dinoCap,
+  };
+});
+await page.locator('#settings-modal .pedia-close').click();
+await page.waitForTimeout(150);
+const settingsClosed = await page.evaluate(() =>
+  document.getElementById('settings-modal').classList.contains('hidden'));
+
+// 树共享几何：放 10 棵树 → geometry.userData.shared，draw calls 增量宽松 ≤ 12
+const callsBefore = await page.evaluate(() => window.__world.stage.renderer.info.render.calls);
+const treeShared = await page.evaluate(() => {
+  const w = window.__world;
+  for (let i = 0; i < 10; i++) w.placeEntity({ x: -18 + i * 4, z: 6 }, 'tree');
+  const lastTwo = w.entities.slice(-2);
+  return lastTwo.every((e) => e.object3d.geometry?.userData.shared === true);
+});
+await page.waitForTimeout(400);
+const callsAfter = await page.evaluate(() => window.__world.stage.renderer.info.render.calls);
+
+// 压测：放恐龙到 cap（low 档 60）→ 第 cap+1 只被拒、实体计数不变、标签抖动
+const capTest = await page.evaluate(() => {
+  const w = window.__world;
+  const alive = () => w.entities.filter((e) => e.isDinosaur && e.alive).length;
+  const cap = w.quality.dinoCap;
+  let guard = 300;
+  while (alive() < cap && guard-- > 0) {
+    w.placeEntity({ x: (Math.random() - 0.5) * 30, z: (Math.random() - 0.5) * 30 }, 'triceratops');
+  }
+  const atCap = alive();
+  const entitiesBefore = w.entities.length;
+  w.placeEntity({ x: 0, z: 0 }, 'triceratops');
+  return {
+    cap,
+    atCap,
+    afterAlive: alive(),
+    entitiesUnchanged: w.entities.length === entitiesBefore,
+    shake: document.getElementById('population-status').classList.contains('shake'),
+    statusText: document.getElementById('population-status').textContent,
+  };
+});
+
 await browser.close();
 
 console.log('canvas:', `${Math.round(canvasBox.width)}x${Math.round(canvasBox.height)}`);
@@ -527,6 +605,11 @@ console.log('final triangles:', finalTriangles);
 console.log('tutorial start:', tutStart);
 console.log('tutorial after sculpt:', tutStep2);
 console.log('tutorial done:', tutDone, ' no repeat after reload:', tutNoRepeat);
+console.log('settings open:', settingsOpen, ' closed again:', settingsClosed);
+console.log('volume sliders -> 0:', volumeState);
+console.log('quality low:', lowQuality);
+console.log('tree shared geometry:', treeShared, ' draw calls:', callsBefore, '->', callsAfter);
+console.log('dino cap stress:', capTest);
 console.log('console errors:', consoleErrors.length, consoleErrors.slice(0, 8));
 console.log('page errors:', pageErrors.length, pageErrors.slice(0, 8));
 
@@ -542,7 +625,7 @@ if (entityCount < 6) {
   console.error('\n❌ dinosaurs were not placed');
   process.exit(1);
 }
-if (!splashHidden || toolCount !== 11) {
+if (!splashHidden || toolCount !== 11 || topCount !== 7) {
   console.error('\n❌ UI not wired correctly');
   process.exit(1);
 }
@@ -683,6 +766,32 @@ if (!tutDone.layerGone || !tutDone.profileDone) {
 }
 if (!tutNoRepeat) {
   console.error('\n❌ tutorial reappeared after being completed');
+  process.exit(1);
+}
+if (!settingsOpen.visible || settingsOpen.sliders !== 2 || settingsOpen.optGroups !== 2 || !settingsClosed) {
+  console.error('\n❌ settings modal did not open/close with sliders and option rows');
+  process.exit(1);
+}
+if (volumeState.music !== 0 || volumeState.sfx !== 0 || volumeState.profileMusic !== 0 || volumeState.profileSfx !== 0) {
+  console.error('\n❌ volume sliders at 0 did not zero the gain nodes / persist to profile');
+  process.exit(1);
+}
+if (
+  lowQuality.profileQuality !== 'low' || lowQuality.tier !== 'low' || lowQuality.shadows ||
+  lowQuality.pixelRatio > 1 || lowQuality.rainDrawRange !== 250 || lowQuality.dinoCap !== 60
+) {
+  console.error('\n❌ low quality tier did not apply (shadows/pixel ratio/rain/cap)');
+  process.exit(1);
+}
+if (!treeShared || callsAfter - callsBefore > 12) {
+  console.error('\n❌ trees are not using shared archetype geometry / draw calls grew too much');
+  process.exit(1);
+}
+if (
+  capTest.atCap !== capTest.cap || capTest.afterAlive !== capTest.cap ||
+  !capTest.entitiesUnchanged || !capTest.shake || !capTest.statusText.includes('60 / 60')
+) {
+  console.error('\n❌ dino hard cap did not reject placement at the limit');
   process.exit(1);
 }
 console.log('\n✅ SMOKE TEST PASSED');

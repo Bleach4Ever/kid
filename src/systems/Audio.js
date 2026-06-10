@@ -1,5 +1,8 @@
 // 全部声音都用 Web Audio API 实时合成，没有任何外部音频文件。
 // AudioContext 必须在用户手势后创建（浏览器自动播放策略），由 splash 的“开始”按钮触发 unlock()。
+import { profile } from './Profile.js';
+
+const clamp01 = (v) => Math.max(0, Math.min(1, Number(v) || 0));
 
 const PENTA = [261.63, 293.66, 329.63, 392.0, 440.0, 523.25, 587.33, 659.25]; // C 大调五声音阶
 
@@ -33,7 +36,10 @@ const CRIES = {
 export class Audio {
   constructor() {
     this.ctx = null;
-    this.muted = false;
+    // 启动即从 profile 恢复；gain 节点 unlock 后才存在，先存值、unlock 时应用
+    this.muted = !!profile.get('muted', false);
+    this.musicVol = clamp01(profile.get('musicVol', 0.5));
+    this.sfxVol = clamp01(profile.get('sfxVol', 0.9));
     this._lastDig = 0;
     this._lastCry = 0;
     this.rainNode = null;
@@ -64,12 +70,13 @@ export class Audio {
     this.master.gain.value = this.muted ? 0 : 0.9;
     this.master.connect(this.ctx.destination);
 
+    // 基准值 1 × 滑条值（默认 0.5/0.9 = 阶段 7 以前的固定音量）
     this.musicGain = this.ctx.createGain();
-    this.musicGain.gain.value = 0.5;
+    this.musicGain.gain.value = this.musicVol;
     this.musicGain.connect(this.master);
 
     this.sfxGain = this.ctx.createGain();
-    this.sfxGain.gain.value = 0.9;
+    this.sfxGain.gain.value = this.sfxVol;
     this.sfxGain.connect(this.master);
 
     // 轻柔回声，让声音更梦幻
@@ -85,12 +92,23 @@ export class Audio {
   }
 
   setMuted(m) {
-    this.muted = m;
-    if (this.master) this.master.gain.value = m ? 0 : 0.9;
+    this.muted = !!m;
+    profile.set('muted', this.muted);
+    if (this.master) this.master.gain.value = this.muted ? 0 : 0.9;
   }
   toggleMute() {
     this.setMuted(!this.muted);
     return this.muted;
+  }
+
+  // 设置面板滑条（0~1）：实时缩放对应 gain 节点
+  setMusicVolume(v) {
+    this.musicVol = clamp01(v);
+    if (this.musicGain) this.musicGain.gain.value = this.musicVol;
+  }
+  setSfxVolume(v) {
+    this.sfxVol = clamp01(v);
+    if (this.sfxGain) this.sfxGain.gain.value = this.sfxVol;
   }
 
   // ---------- 基础合成单元 ----------

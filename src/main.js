@@ -11,8 +11,10 @@ import { WorldEvents } from './systems/WorldEvents.js';
 import { Audio } from './systems/Audio.js';
 import { Bus } from './systems/Bus.js';
 import { Particles } from './systems/Particles.js';
+import { Quality } from './systems/Quality.js';
 import { Toolbar } from './ui/Toolbar.js';
 import { Pedia } from './ui/Pedia.js';
+import { Settings } from './ui/Settings.js';
 import { Tutorial } from './ui/Tutorial.js';
 import { Quests } from './systems/Quests.js';
 import { encodeHeightsI16, decodeHeightsI16 } from './systems/Storage.js';
@@ -38,6 +40,10 @@ const sky = new Sky(stage.scene, { sun: stage.sun, hemi: stage.hemi, ambient: st
 const audio = new Audio();
 const tools = new Tools();
 const weather = new Weather(stage.scene, terrain);
+// 性能分级：按 profile（auto/high/low）立即应用像素比/阴影/雨量/恐龙上限。
+// onChange 构造后再挂：构造期间 quality 还在 TDZ，updatePopulationStatus 不能引用它
+const quality = new Quality({ stage, weather });
+quality.onChange = () => updatePopulationStatus(); // 上限随档位变化 → 刷新计数标签
 const bus = new Bus();
 const particles = new Particles(stage.scene);
 // ensureNight / placeEntity 都是函数声明（提升），这里先引用没问题
@@ -78,8 +84,10 @@ const PRESET_ENTITIES = {
 };
 
 function disposeObj(obj) {
-  // 只回收每个实例独有的几何体；材质是共享的，不能 dispose
-  obj.traverse((o) => o.geometry && o.geometry.dispose());
+  // 只回收每个实例独有的几何体；材质和归档共享几何（树/花）不能 dispose
+  obj.traverse((o) => {
+    if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose();
+  });
 }
 
 function destroyEntity(entity) {
@@ -122,12 +130,26 @@ function addEntity(wrapper, pos) {
   }
 }
 
+function aliveDinoCount() {
+  return entities.reduce((sum, entity) => sum + (entity.isDinosaur && entity.alive ? 1 : 0), 0);
+}
+
 function updatePopulationStatus() {
   if (!populationStatus) return;
-  const total = entities.reduce((sum, entity) => sum + (entity.isDinosaur && entity.alive ? 1 : 0), 0);
-  populationStatus.textContent = t('population.count', { n: total, max: 100 });
-  populationStatus.classList.toggle('warning', total >= 80 && total < 100);
-  populationStatus.classList.toggle('danger', total >= 100);
+  const total = aliveDinoCount();
+  const max = quality.dinoCap;
+  populationStatus.textContent = t('population.count', { n: total, max });
+  populationStatus.classList.toggle('warning', total >= max * 0.8 && total < max);
+  populationStatus.classList.toggle('danger', total >= max);
+}
+
+// 到达硬上限被拒：计数标签抖一抖（重置动画的标准 reflow 技巧）
+populationStatus?.addEventListener('animationend', () => populationStatus.classList.remove('shake'));
+function shakePopulationStatus() {
+  if (!populationStatus) return;
+  populationStatus.classList.remove('shake');
+  void populationStatus.offsetWidth;
+  populationStatus.classList.add('shake');
 }
 
 function placeEntity(point, kind) {
@@ -141,6 +163,12 @@ function placeEntity(point, kind) {
       count: 10, colors: ['#8fdf7a', '#bce98c', '#6fc96b'], speed: 1.6, gravity: 4, life: 0.7, size: 0.16,
     });
   } else {
+    // 硬上限：活恐龙到顶 → 轻 squeak + 计数标签抖动，拒绝放置
+    if (aliveDinoCount() >= quality.dinoCap) {
+      audio.playSqueak();
+      shakePopulationStatus();
+      return;
+    }
     const w = createDinosaur(kind);
     addEntity(w, new THREE.Vector3(point.x, SEA_LEVEL, point.z));
     audio.playCry(kind);
@@ -202,6 +230,8 @@ function hatchEgg(egg) {
   const position = groundPosition(egg.object3d.position.x, egg.object3d.position.z);
   if (egg.nest?.egg === egg) egg.nest.egg = null;
   requestRemove(egg);
+  // 硬上限：到顶时蛋安静移除、不出生（不放音效不撒彩纸）
+  if (aliveDinoCount() >= quality.dinoCap) return;
   const baby = createDinosaur(egg.species);
   addEntity(baby, position);
   audio.playHatch();
@@ -367,6 +397,8 @@ function onAction(id) {
     worldEvents.trigger(id, audio);
   } else if (id === 'pedia') {
     pedia.toggle();
+  } else if (id === 'settings') {
+    settings.toggle();
   }
   bus.emit('action', { id });
 }
@@ -382,6 +414,7 @@ function resetWorld() {
 
 const toolbar = new Toolbar({ tools, audio, onAction, onReset: resetWorld });
 const pedia = new Pedia({ bus, audio, toolbar });
+const settings = new Settings({ audio, quality });
 const quests = new Quests({ bus, audio });
 const tutorial = new Tutorial({ bus, audio, particles, toolbar });
 bus.on('unlock', () => toolbar.refreshMagic()); // 星星里程碑解锁 → 魔法面板即时刷新
@@ -457,6 +490,7 @@ function loop() {
   particles.update(dt);
   for (const e of entities) e.update(dt, ctx);
   flushRemovals();
+  quality.noteFrame(dt); // auto 档持续卡顿 → 静默降级
   stage.render();
   requestAnimationFrame(loop);
 }
@@ -478,6 +512,10 @@ window.__world = {
   restoreWorld,
   hasSave,
   bus,
+  audio,
+  quality,
+  settings,
+  placeEntity,
   pedia,
   quests,
   tutorial,

@@ -22,6 +22,7 @@ export const ACTIONS = [
   { id: 'rain', icon: '🌧️', label: 'action.rain' },
   { id: 'magic', icon: '✨', label: 'action.magic' },
   { id: 'pedia', icon: '📖', label: 'action.pedia' },
+  { id: 'settings', icon: '⚙️', label: 'action.settings' },
 ];
 
 // ✨ 魔法面板（第二行）：unlock 对应 profile.unlocks 里的 id，未解锁直接隐藏；

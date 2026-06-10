@@ -10,12 +10,13 @@ export class Weather {
     this.raining = false;
 
     // ---- 雨滴（粒子） ----
-    this.count = 700;
+    this.maxCount = 700;
+    this.count = this.maxCount;
     const g = new THREE.BufferGeometry();
-    const pos = new Float32Array(this.count * 3);
-    this.vel = new Float32Array(this.count);
+    const pos = new Float32Array(this.maxCount * 3);
+    this.vel = new Float32Array(this.maxCount);
     const span = WORLD_SIZE * 0.7;
-    for (let i = 0; i < this.count; i++) {
+    for (let i = 0; i < this.maxCount; i++) {
       pos[i * 3] = (Math.random() - 0.5) * span;
       pos[i * 3 + 1] = Math.random() * 30;
       pos[i * 3 + 2] = (Math.random() - 0.5) * span;
@@ -45,6 +46,12 @@ export class Weather {
     this.rainbow.rotation.y = 0.15;
     scene.add(this.rainbow);
     this.rainbowT = 0; // >0 表示正在显示
+  }
+
+  // 性能分级：不重建几何，只缩小绘制范围 + 更新循环上界
+  setRainCount(n) {
+    this.count = Math.max(0, Math.min(this.maxCount, n | 0));
+    this.rainGeo.setDrawRange(0, this.count);
   }
 
   toggleRain(audio) {
