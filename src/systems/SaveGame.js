@@ -4,7 +4,7 @@ import { storage, encodeHeightsI16, decodeHeightsI16 } from './Storage.js';
 import { TERRAIN_SEGMENTS } from '../constants.js';
 
 const KEY = 'dino-world:save';
-const VERSION = 1;
+const VERSION = 2; // v2：世界放大 + 地形网格变更，旧档自动失效回到初始预设
 const ENCODING = 'i16cm-b64';
 const VERTEX_COUNT = (TERRAIN_SEGMENTS + 1) * (TERRAIN_SEGMENTS + 1);
 

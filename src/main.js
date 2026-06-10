@@ -115,25 +115,29 @@ const populationStatus = document.getElementById('population-status');
 let currentPreset = 'park';
 
 const PRESET_ENTITIES = {
+  // 园区：散布在缓坡草地，避开 (18,-14) 的池塘
   park: [
-    ['tree', -16, -8], ['tree', -12, -4], ['tree', -18, 1], ['tree', 15, -7],
-    ['tree', 19, -2], ['tree', 13, 3], ['tree', -3, 14], ['tree', 3, 16],
-    ['flower', -8, 5], ['flower', -5, 7], ['flower', -2, 5], ['flower', 2, 8],
-    ['flower', 6, 5], ['flower', 9, 7], ['triceratops', -7, -1],
-    ['stegosaurus', 7, 0], ['brachiosaurus', 0, 10], ['oviraptor', 13, 8],
+    ['tree', -28, -14], ['tree', -22, -6], ['tree', -30, 6], ['tree', -14, 16],
+    ['tree', 24, 14], ['tree', 30, 6], ['tree', 6, -26], ['tree', -6, 26],
+    ['flower', -14, 6], ['flower', -8, 10], ['flower', -3, 4], ['flower', 4, 10],
+    ['flower', 10, 16], ['flower', -18, -2], ['triceratops', -12, -4],
+    ['stegosaurus', -4, -14], ['brachiosaurus', 0, 16], ['oviraptor', 14, 18],
     ['pterosaur', 0, 0],
   ],
+  // 峡谷：树/恐龙放两侧台地，避开中间蜿蜒河谷（x≈sin(z*0.07)*10）
   canyon: [
-    ['tree', -20, 8], ['tree', -18, 13], ['tree', 20, -10], ['tree', 18, -15],
-    ['flower', -5, 5], ['flower', 0, 7], ['flower', 5, 4],
-    ['triceratops', -8, 0], ['raptor', 10, -2], ['oviraptor', 4, 8],
+    ['tree', -30, 12], ['tree', -26, 20], ['tree', 30, -14], ['tree', 27, -22],
+    ['flower', -24, 4], ['flower', 24, 8], ['flower', -26, -6], ['flower', 26, 18],
+    ['triceratops', -26, 0], ['raptor', 26, -4], ['oviraptor', -24, 14],
     ['pterosaur', 0, 0],
   ],
+  // 群岛：实体落在四座岛中心附近的陆地上
   islands: [
-    ['tree', -19, -7], ['tree', -13, -2], ['flower', -16, 3],
-    ['triceratops', -12, -5], ['tree', 11, 9], ['tree', 17, 13],
-    ['flower', 14, 5], ['stegosaurus', 13, 10], ['tree', 18, -17],
-    ['raptor', 16, -15], ['pterosaur', 0, 0],
+    ['tree', -26, -10], ['tree', -18, -4], ['flower', -22, 2], ['flower', -28, -14],
+    ['triceratops', -23, -8], ['brachiosaurus', -16, 0],
+    ['tree', 18, 14], ['tree', 24, 18], ['flower', 16, 8], ['stegosaurus', 20, 14],
+    ['tree', 26, -24], ['raptor', 24, -22], ['flower', -17, 31],
+    ['pterosaur', 0, 0],
   ],
   blank: [],
 };
@@ -608,6 +612,7 @@ function loop() {
     for (const e of entities) e.update(dt, ctx);
     flushRemovals();
     quality.noteFrame(dt); // auto 档持续卡顿 → 静默降级
+    stage.updateKeys(dt); // 键盘平移/旋转，须在 render() 里的 controls.update() 之前
     stage.render();
   }
   requestAnimationFrame(loop);

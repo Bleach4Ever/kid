@@ -183,8 +183,8 @@ const mosasaurState = await page.evaluate(async () => {
   if (!mosa) return { exists: false };
   let wx = null;
   let wz = null;
-  for (let x = -25; x <= 25 && wx === null; x += 2) {
-    for (let z = -25; z <= 25; z += 2) {
+  for (let x = -40; x <= 40 && wx === null; x += 2) {
+    for (let z = -40; z <= 40; z += 2) {
       if (w.terrain.getHeightAt(x, z) < w.seaLevel - 0.8) { wx = x; wz = z; break; }
     }
   }
@@ -201,6 +201,62 @@ const mosasaurState = await page.evaluate(async () => {
 });
 
 await page.screenshot({ path: 'smoke.png' });
+
+// 键盘视角：方向键平移 + Q/E 旋转（鼠标/触摸不受影响）
+const camBeforeKeys = await page.evaluate(() => ({
+  x: window.__world.stage.controls.target.x,
+  az: window.__world.stage.controls.getAzimuthalAngle(),
+}));
+await page.keyboard.down('ArrowRight');
+await page.waitForTimeout(300);
+await page.keyboard.up('ArrowRight');
+await page.keyboard.down('KeyQ');
+await page.waitForTimeout(300);
+await page.keyboard.up('KeyQ');
+await page.waitForTimeout(60);
+const camAfterKeys = await page.evaluate(() => ({
+  x: window.__world.stage.controls.target.x,
+  az: window.__world.stage.controls.getAzimuthalAngle(),
+}));
+const keyboardCam = {
+  pan: Math.abs(camAfterKeys.x - camBeforeKeys.x),
+  rot: Math.abs(camAfterKeys.az - camBeforeKeys.az),
+};
+console.log('keyboard cam:', { pan: keyboardCam.pan.toFixed(2), rot: keyboardCam.rot.toFixed(3) });
+
+// 陆生龙不进水：放进岸边浅水会自己爬回陆地（翼龙/沧龙不受影响）
+const landEscape = await page.evaluate(() => {
+  const w = window.__world;
+  let wx = null;
+  let wz = null;
+  outer:
+  for (let x = -40; x <= 40; x += 2) {
+    for (let z = -40; z <= 40; z += 2) {
+      if (w.terrain.getHeightAt(x, z) >= w.seaLevel) continue;
+      for (const [ox, oz] of [[3, 0], [-3, 0], [0, 3], [0, -3]]) {
+        if (w.terrain.getHeightAt(x + ox, z + oz) > w.seaLevel + 0.3) { wx = x; wz = z; break outer; }
+      }
+    }
+  }
+  if (wx === null) return { found: false };
+  w.placeEntity({ x: wx, z: wz }, 'triceratops');
+  const dino = [...w.entities].reverse().find((e) => e.isDinosaur && e.species === 'triceratops' && !e.swimming);
+  dino.object3d.position.set(wx, w.seaLevel, wz);
+  window.__escapeId = w.entities.indexOf(dino);
+  return { found: true, startUnderwater: w.terrain.getHeightAt(wx, wz) < w.seaLevel };
+});
+await page.waitForTimeout(3000);
+const landEscapeAfter = await page.evaluate(() => {
+  const w = window.__world;
+  const dino = w.entities[window.__escapeId];
+  if (!dino) return { gone: true };
+  const p = dino.object3d.position;
+  const onLand = w.terrain.getHeightAt(p.x, p.z) >= w.seaLevel;
+  const swimming = !!dino.swimming;
+  w.removeEntity(dino); // 清理：不影响后续上限计数
+  return { onLand, swimming };
+});
+console.log('land dino escape:', landEscape, '->', landEscapeAfter);
 
 // i18n：切到英文 → 工具栏标签/标题立即变化
 const i18nState = await page.evaluate(() => {
@@ -1189,6 +1245,14 @@ if (
 }
 if (capRestore.alive > capRestore.cap) {
   console.error('\n❌ restoreWorld exceeded the dino hard cap', capRestore);
+  process.exit(1);
+}
+if (keyboardCam.pan < 0.5 || keyboardCam.rot < 0.05) {
+  console.error('\n❌ keyboard camera had no effect (arrows should pan, Q should rotate)', keyboardCam);
+  process.exit(1);
+}
+if (!landEscape.found || !landEscape.startUnderwater || !landEscapeAfter.onLand || landEscapeAfter.swimming) {
+  console.error('\n❌ land dinosaur did not climb out of the water', { landEscape, landEscapeAfter });
   process.exit(1);
 }
 console.log('\n✅ SMOKE TEST PASSED');

@@ -1,7 +1,7 @@
 // 全局常量：所有模块共享，避免数值不一致
 
-export const WORLD_SIZE = 84; // 地形在 X/Z 方向的总跨度（-42 ~ 42）
-export const TERRAIN_SEGMENTS = 120; // 地图扩大后保持足够的雕刻精度
+export const WORLD_SIZE = 120; // 地形在 X/Z 方向的总跨度（-60 ~ 60）
+export const TERRAIN_SEGMENTS = 180; // 更大地图下保持足够的雕刻精度（dx≈0.667）
 export const SEA_LEVEL = 0; // 海平面高度
 export const MAX_HEIGHT = 9; // 山的最大高度
 export const MIN_HEIGHT = -5; // 海底最低高度

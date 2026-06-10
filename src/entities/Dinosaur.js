@@ -494,6 +494,17 @@ export function createDinosaur(species, saved = null, opts = {}) {
     return Math.max(0.65, lerp(0.65, 1, Math.min(1, age / 60)) + foodGrowth);
   }
 
+  // 在 (cx,cz) 周围找一块陆地（高于海平面）。最多采样 8 次；周围全是水就退回中心点，绝不返回水点。
+  function landSpotNear(terrain, cx, cz, radius) {
+    for (let i = 0; i < 8; i++) {
+      const offset = diskTarget(radius);
+      const x = clamp(cx + offset.x, -BOUND, BOUND);
+      const z = clamp(cz + offset.z, -BOUND, BOUND);
+      if (terrain.getHeightAt(x, z) > SEA_LEVEL + 0.15) return { x, z };
+    }
+    return { x: cx, z: cz };
+  }
+
   function chooseLandTarget(ctx) {
     // 结伴：35% 概率去同物种伙伴附近 → 自然成群
     if (Math.random() < 0.35) {
@@ -512,7 +523,7 @@ export function createDinosaur(species, saved = null, opts = {}) {
       const candidate = diskTarget();
       if (ctx.terrain.getHeightAt(candidate.x, candidate.z) > SEA_LEVEL + 0.15) return candidate;
     }
-    return diskTarget(BOUND * 0.75);
+    return { x: group.position.x, z: group.position.z }; // 全是水 → 原地不动，绝不走进水里
   }
 
   // 沧龙的游走目标：优先找深水点；整张图没水就退化为陆地慢速漫步（无害）
@@ -524,24 +535,54 @@ export function createDinosaur(species, saved = null, opts = {}) {
     return null;
   }
 
-  function moveToward(target, dt, terrain, speedMultiplier = 1) {
+  function moveToward(target, dt, terrain, speedMultiplier = 1, allowWater = false) {
     const p = group.position;
     const dx = target.x - p.x;
     const dz = target.z - p.z;
     const distance = Math.hypot(dx, dz);
+    wrapper._waterBlocked = false;
     if (distance > 0.05) {
       const vx = dx / distance;
       const vz = dz / distance;
-      p.x += vx * config.speed * speedMultiplier * dt;
-      p.z += vz * config.speed * speedMultiplier * dt;
-      group.rotation.y = Math.atan2(vx, vz);
-      walkTime += dt * config.speed * 5;
-      for (let i = 0; i < model.stepParts.length; i++) {
-        model.stepParts[i].rotation.x = Math.sin(walkTime + i * Math.PI) * 0.28;
+      const nx = p.x + vx * config.speed * speedMultiplier * dt;
+      const nz = p.z + vz * config.speed * speedMultiplier * dt;
+      // 陆生龙不踏入水里：下一步若落进水面就停在岸边并标记，由调用方转身重选目标
+      if (!allowWater && terrain.getHeightAt(nx, nz) < SEA_LEVEL + 0.15) {
+        wrapper._waterBlocked = true;
+        group.rotation.y = Math.atan2(vx, vz); // 仍朝向目标，避免原地抖动
+      } else {
+        p.x = nx;
+        p.z = nz;
+        group.rotation.y = Math.atan2(vx, vz);
+        walkTime += dt * config.speed * 5;
+        for (let i = 0; i < model.stepParts.length; i++) {
+          model.stepParts[i].rotation.x = Math.sin(walkTime + i * Math.PI) * 0.28;
+        }
       }
     }
     p.y = Math.max(SEA_LEVEL, terrain.getHeightAt(p.x, p.z));
     return distance;
+  }
+
+  // 被放进水里 / 被挖塌淹没的陆生龙：梯度上升爬回最近陆地。
+  // 朝向保持约 0.5s（_escapeTimer 冷却）再重采，避免平底水域里方向抖动。
+  function escapeWater(dt, ctx) {
+    const p = group.position;
+    wrapper._escapeTimer = (wrapper._escapeTimer || 0) - dt;
+    if (!wrapper._escapeDir || wrapper._escapeTimer <= 0) {
+      let best = null;
+      let bestH = -Infinity;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * TAU;
+        const sx = p.x + Math.cos(a) * 1.2;
+        const sz = p.z + Math.sin(a) * 1.2;
+        const h = ctx.terrain.getHeightAt(sx, sz);
+        if (h > bestH) { bestH = h; best = { x: sx, z: sz }; }
+      }
+      wrapper._escapeDir = best;
+      wrapper._escapeTimer = 0.5;
+    }
+    moveToward(wrapper._escapeDir, dt, ctx.terrain, 1.8, true); // allowWater + 加速：扑腾着尽快爬回岸
   }
 
   function releaseNest() {
@@ -552,10 +593,18 @@ export function createDinosaur(species, saved = null, opts = {}) {
   function acquireNest(ctx) {
     let nest = nearestNest(wrapper, ctx.entities);
     if (!nest) {
-      const offset = diskTarget(5);
-      const x = clamp(group.position.x + offset.x, -BOUND, BOUND);
-      const z = clamp(group.position.z + offset.z, -BOUND, BOUND);
-      nest = ctx.createNest(wrapper.species, { x, z });
+      // 陆生龙的巢必须建在陆地上；翼龙/沧龙保留近水的偏好点（createNest 仍会就近找陆地）
+      let spot;
+      if (wrapper.flying || wrapper.swimming) {
+        const offset = diskTarget(5);
+        spot = {
+          x: clamp(group.position.x + offset.x, -BOUND, BOUND),
+          z: clamp(group.position.z + offset.z, -BOUND, BOUND),
+        };
+      } else {
+        spot = landSpotNear(ctx.terrain, group.position.x, group.position.z, 5);
+      }
+      nest = ctx.createNest(wrapper.species, spot);
       wrapper.lifeState = 'building-nest';
     } else {
       wrapper.lifeState = 'seeking-nest';
@@ -688,6 +737,16 @@ export function createDinosaur(species, saved = null, opts = {}) {
       return;
     }
 
+    // 陆生龙身处水中（被放进海里 / 地形被挖塌淹没）→ 优先爬回陆地，期间不觅食/不产蛋
+    if (
+      !wrapper.flying && !wrapper.swimming &&
+      ctx.terrain.getHeightAt(group.position.x, group.position.z) < SEA_LEVEL + 0.15
+    ) {
+      wrapper.lifeState = 'escaping-water';
+      escapeWater(dt, ctx);
+      return;
+    }
+
     if (updateReproduction(dt, ctx)) {
       alertMarker.visible = false;
       return;
@@ -780,6 +839,13 @@ export function createDinosaur(species, saved = null, opts = {}) {
       wrapper.lifeState = 'foraging';
       const chaseSpeed = wrapper.diet === 'carnivore' ? 1.7 : 1.25;
       const distance = moveToward(wrapper.target.object3d.position, dt, ctx.terrain, chaseSpeed);
+      if (wrapper._waterBlocked) {
+        // 食物在水对岸够不着：放弃目标回到漫游，别一直磨蹭岸边
+        wrapper.target = null;
+        alertMarker.visible = false;
+        wrapper.lifeState = 'wandering';
+        return;
+      }
       const eatDistance = Math.max(0.8, wrapper.size * 0.75);
       if (distance <= eatDistance && wrapper.target.consume?.(ctx.removeEntity)) {
         const foodPos = wrapper.target.object3d.position;
@@ -804,8 +870,11 @@ export function createDinosaur(species, saved = null, opts = {}) {
     }
 
     wrapper.lifeState = 'wandering';
-    if (Math.hypot(wanderTarget.x - group.position.x, wanderTarget.z - group.position.z) < 0.8) {
-      wanderTarget = chooseLandTarget(ctx);
+    if (
+      wrapper._waterBlocked ||
+      Math.hypot(wanderTarget.x - group.position.x, wanderTarget.z - group.position.z) < 0.8
+    ) {
+      wanderTarget = chooseLandTarget(ctx); // 到达或被水挡住 → 转身往内陆重选
     }
     moveToward(wanderTarget, dt, ctx.terrain);
   };

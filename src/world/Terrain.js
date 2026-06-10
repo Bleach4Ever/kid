@@ -61,37 +61,45 @@ export class Terrain {
   }
 
   _heightForPreset(preset, x, z) {
-    const half = this.size / 2;
+    const half = this.size / 2; // 现在是 60
     const d = Math.hypot(x, z) / half;
-    const edge = 1 - smoothstep(0.68, 0.97, d);
-    const noise = valueNoise(x * 0.1 + 50, z * 0.1 + 50) - 0.5;
+    const edge = 1 - smoothstep(0.70, 0.97, d); // 边缘自然沉入海里
+    const noise = valueNoise(x * 0.075 + 50, z * 0.075 + 50) - 0.5; // 频率随地图放大略降
 
     if (preset === 'blank') {
       return 1.15 * edge - 1.5 * (1 - edge);
     }
 
     if (preset === 'canyon') {
-      const rim = smoothstep(0.36, 0.78, d) * edge * 5.8;
-      const valley = (1 - smoothstep(0.05, 0.45, Math.abs(x) / half)) * 1.1;
-      return clamp(0.9 + rim - valley + noise * 2.2 * edge - 2.2 * (1 - edge), MIN_HEIGHT, MAX_HEIGHT);
+      // 峡谷：两侧高台地，中间一条随 z 蜿蜒的河谷
+      const rim = smoothstep(0.34, 0.80, d) * edge * 6.2;
+      const riverX = Math.sin(z * 0.07) * 10; // 河道随 z 蜿蜒
+      const river = (1 - smoothstep(3.5, 11, Math.abs(x - riverX))) * 3.6; // 河谷下切到水面
+      return clamp(1.0 + rim - river + noise * 2.4 * edge - 2.4 * (1 - edge), MIN_HEIGHT, MAX_HEIGHT);
     }
 
     if (preset === 'islands') {
+      // 群岛：4 座更大更清晰的岛 + 明确的海湾
       const island = (cx, cz, radius, height) => {
         const localD = Math.hypot(x - cx, z - cz) / radius;
-        return (1 - smoothstep(0.18, 1, localD)) * height;
+        return (1 - smoothstep(0.22, 1, localD)) * height;
       };
       const land =
-        island(-16, -5, 20, 4.2) +
-        island(14, 10, 17, 3.8) +
-        island(18, -17, 12, 3.3) +
-        island(-12, 22, 10, 2.8);
-      return clamp(land - 1.65 + noise * 1.2 * smoothstep(0, 2.5, land), MIN_HEIGHT, MAX_HEIGHT);
+        island(-23, -8, 28, 4.6) + // 主岛（最大）
+        island(20, 14, 24, 4.0) +
+        island(26, -24, 17, 3.4) +
+        island(-17, 31, 15, 3.0);
+      return clamp(land - 1.85 + noise * 1.3 * smoothstep(0, 2.5, land), MIN_HEIGHT, MAX_HEIGHT);
     }
 
-    const island = (1 - smoothstep(0.12, 0.94, d)) * 4.7 - 1.45;
-    const valley = Math.exp(-(x * x) / 190) * 0.8;
-    return clamp(island - valley + noise * 2.2 * edge, MIN_HEIGHT, MAX_HEIGHT);
+    // park（默认）：大片缓坡草地 + 一汪小池塘
+    const base = (1 - smoothstep(0.20, 0.96, d)) * 3.4; // 宽阔陆地穹顶
+    const hills =
+      (valueNoise(x * 0.12 + 11, z * 0.12 + 7) - 0.5) * 3.2 +
+      (valueNoise(x * 0.30 + 4, z * 0.30 + 9) - 0.5) * 1.1; // 双层起伏丘陵
+    const land = base + hills * edge - 1.1 * (1 - edge);
+    const pondMask = smoothstep(13, 2, Math.hypot(x - 18, z + 14)); // 1 在池心，0 在池外
+    return clamp(lerp(land, -2.2, pondMask), MIN_HEIGHT, MAX_HEIGHT); // 池心强制成清晰水面
   }
 
   generate(preset = this.preset || 'park') {
