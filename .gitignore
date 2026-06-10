@@ -1,6 +1,5 @@
 node_modules
 dist
-.claude/
 # 测试时生成的截图
 smoke.png
 preview-day.png

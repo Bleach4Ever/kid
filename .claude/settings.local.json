@@ -1,0 +1,5 @@
+{
+  "enabledMcpjsonServers": [
+    "mysql_mcp_alchemy_prod"
+  ]
+}
