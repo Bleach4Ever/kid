@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#bfe3ff" />
+    <title>我的小世界</title>
+  </head>
+  <body>
+    <!-- 3D 画布 -->
+    <canvas id="scene"></canvas>
+
+    <!-- 顶部：天气 / 昼夜 / 声音 / 重置 -->
+    <div id="top-bar"></div>
+    <div id="population-status" class="population-status">🦕 恐龙 0 / 100</div>
+
+    <!-- 底部：创造工具 -->
+    <div id="toolbar"></div>
+
+    <!-- 开始引导（同时解锁声音） -->
+    <div id="splash">
+      <div class="splash-card">
+        <div class="splash-emoji">🌍✨</div>
+        <h1>我的小世界</h1>
+        <p>选择一个世界，然后继续自由创造</p>
+        <div id="preset-list" class="preset-list">
+          <button class="preset-card selected" data-preset="park">
+            <span class="preset-icon">🌿</span>
+            <strong>恐龙乐园</strong>
+            <small>树林、花田和食草龙</small>
+          </button>
+          <button class="preset-card" data-preset="canyon">
+            <span class="preset-icon">⛰️</span>
+            <strong>高山峡谷</strong>
+            <small>高山环绕的开阔谷地</small>
+          </button>
+          <button class="preset-card" data-preset="islands">
+            <span class="preset-icon">🏝️</span>
+            <strong>群岛世界</strong>
+            <small>几座小岛组成的家园</small>
+          </button>
+          <button class="preset-card" data-preset="blank">
+            <span class="preset-icon">✨</span>
+            <strong>从零开始</strong>
+            <small>宽阔空岛，全部自己创造</small>
+          </button>
+        </div>
+        <button id="start-btn">开 始 玩 ▶</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

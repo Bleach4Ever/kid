@@ -1,0 +1,301 @@
+import './style.css';
+import * as THREE from 'three';
+import { Stage } from './world/Scene.js';
+import { Terrain } from './world/Terrain.js';
+import { Water } from './world/Water.js';
+import { Sky } from './world/Sky.js';
+import { Tools } from './systems/Tools.js';
+import { Input } from './systems/Input.js';
+import { Weather } from './systems/Weather.js';
+import { Audio } from './systems/Audio.js';
+import { Toolbar } from './ui/Toolbar.js';
+import { createTree, createFlower } from './entities/Tree.js';
+import { createDinosaur } from './entities/Dinosaur.js';
+import { createEgg, createNest as createNestEntity, createPoop } from './entities/Ecosystem.js';
+import { LIMITS, SEA_LEVEL } from './constants.js';
+
+// ---------------- 装配世界 ----------------
+const canvas = document.getElementById('scene');
+const stage = new Stage(canvas);
+const terrain = new Terrain();
+stage.scene.add(terrain.mesh);
+const water = new Water();
+stage.scene.add(water.mesh);
+const sky = new Sky(stage.scene, { sun: stage.sun, hemi: stage.hemi, ambient: stage.ambient });
+const audio = new Audio();
+const tools = new Tools();
+const weather = new Weather(stage.scene, terrain);
+
+// ---------------- 实体管理（树/花/恐龙） ----------------
+const entities = [];
+const counts = {};
+const pendingRemovals = new Set();
+const populationStatus = document.getElementById('population-status');
+let currentPreset = 'park';
+
+const PRESET_ENTITIES = {
+  park: [
+    ['tree', -16, -8], ['tree', -12, -4], ['tree', -18, 1], ['tree', 15, -7],
+    ['tree', 19, -2], ['tree', 13, 3], ['tree', -3, 14], ['tree', 3, 16],
+    ['flower', -8, 5], ['flower', -5, 7], ['flower', -2, 5], ['flower', 2, 8],
+    ['flower', 6, 5], ['flower', 9, 7], ['triceratops', -7, -1],
+    ['stegosaurus', 7, 0], ['brachiosaurus', 0, 10], ['oviraptor', 13, 8],
+    ['pterosaur', 0, 0],
+  ],
+  canyon: [
+    ['tree', -20, 8], ['tree', -18, 13], ['tree', 20, -10], ['tree', 18, -15],
+    ['flower', -5, 5], ['flower', 0, 7], ['flower', 5, 4],
+    ['triceratops', -8, 0], ['raptor', 10, -2], ['oviraptor', 4, 8],
+    ['pterosaur', 0, 0],
+  ],
+  islands: [
+    ['tree', -19, -7], ['tree', -13, -2], ['flower', -16, 3],
+    ['triceratops', -12, -5], ['tree', 11, 9], ['tree', 17, 13],
+    ['flower', 14, 5], ['stegosaurus', 13, 10], ['tree', 18, -17],
+    ['raptor', 16, -15], ['pterosaur', 0, 0],
+  ],
+  blank: [],
+};
+
+function disposeObj(obj) {
+  // 只回收每个实例独有的几何体；材质是共享的，不能 dispose
+  obj.traverse((o) => o.geometry && o.geometry.dispose());
+}
+
+function destroyEntity(entity) {
+  const idx = entities.indexOf(entity);
+  if (idx < 0) return;
+  entity.alive = false;
+  stage.scene.remove(entity.object3d);
+  disposeObj(entity.object3d);
+  entities.splice(idx, 1);
+  counts[entity.kind] = Math.max(0, (counts[entity.kind] || 0) - 1);
+  updatePopulationStatus();
+}
+
+function requestRemove(entity) {
+  if (!entity.alive) return;
+  entity.alive = false;
+  pendingRemovals.add(entity);
+}
+
+function flushRemovals() {
+  for (const entity of pendingRemovals) destroyEntity(entity);
+  pendingRemovals.clear();
+}
+
+function addEntity(wrapper, pos) {
+  wrapper.object3d.position.copy(pos);
+  stage.scene.add(wrapper.object3d);
+  entities.push(wrapper);
+  counts[wrapper.kind] = (counts[wrapper.kind] || 0) + 1;
+  updatePopulationStatus();
+  // 超过上限：删掉最早的同类，保持流畅
+  const limit = LIMITS[wrapper.kind];
+  if (Number.isFinite(limit) && counts[wrapper.kind] > limit) {
+    const idx = entities.findIndex((e) => e.kind === wrapper.kind);
+    if (idx >= 0) {
+      const old = entities[idx];
+      destroyEntity(old);
+    }
+  }
+}
+
+function updatePopulationStatus() {
+  if (!populationStatus) return;
+  const total = entities.reduce((sum, entity) => sum + (entity.isDinosaur && entity.alive ? 1 : 0), 0);
+  populationStatus.textContent = `🦕 恐龙 ${total} / 100`;
+  populationStatus.classList.toggle('warning', total >= 80 && total < 100);
+  populationStatus.classList.toggle('danger', total >= 100);
+}
+
+function placeEntity(point, kind) {
+  if (kind === 'tree' || kind === 'flower') {
+    const groundY = terrain.getHeightAt(point.x, point.z);
+    const y = Math.max(SEA_LEVEL - 0.1, groundY);
+    const w = kind === 'tree' ? createTree() : createFlower();
+    addEntity(w, new THREE.Vector3(point.x, y, point.z));
+    kind === 'tree' ? audio.playPlop() : audio.playSparkle();
+  } else {
+    const w = createDinosaur(kind);
+    addEntity(w, new THREE.Vector3(point.x, SEA_LEVEL, point.z));
+    audio.playDinosaur();
+  }
+}
+
+function placePresetEntity(kind, x, z) {
+  const y = Math.max(SEA_LEVEL - 0.1, terrain.getHeightAt(x, z));
+  const wrapper = kind === 'tree'
+    ? createTree()
+    : kind === 'flower'
+      ? createFlower()
+      : createDinosaur(kind);
+  addEntity(wrapper, new THREE.Vector3(x, y, z));
+}
+
+function groundPosition(x, z) {
+  return new THREE.Vector3(x, Math.max(SEA_LEVEL, terrain.getHeightAt(x, z)), z);
+}
+
+function createNest(species, preferred) {
+  let x = preferred.x;
+  let z = preferred.z;
+  for (let i = 0; i < 10; i++) {
+    const candidateX = i === 0 ? x : x + (Math.random() - 0.5) * 10;
+    const candidateZ = i === 0 ? z : z + (Math.random() - 0.5) * 10;
+    if (terrain.getHeightAt(candidateX, candidateZ) > SEA_LEVEL + 0.1) {
+      x = candidateX;
+      z = candidateZ;
+      break;
+    }
+  }
+  const nest = createNestEntity(species);
+  addEntity(nest, groundPosition(x, z));
+  return nest;
+}
+
+function layEgg(parent, nest) {
+  if (!nest?.alive || nest.egg) return null;
+  const target = groundPosition(nest.object3d.position.x, nest.object3d.position.z);
+  const behind = new THREE.Vector3(0, 0, -1)
+    .applyQuaternion(parent.object3d.quaternion)
+    .multiplyScalar(Math.max(0.5, parent.size * 0.55));
+  const start = parent.object3d.position.clone().add(behind);
+  start.y += parent.flying ? 0 : Math.max(0.8, parent.size * 0.65);
+  const egg = createEgg(parent.species, nest, target);
+  addEntity(egg, start);
+  nest.egg = egg;
+  audio.playPlop();
+  return egg;
+}
+
+function hatchEgg(egg) {
+  if (!egg.alive || egg.consumed) return;
+  const position = groundPosition(egg.object3d.position.x, egg.object3d.position.z);
+  if (egg.nest?.egg === egg) egg.nest.egg = null;
+  requestRemove(egg);
+  addEntity(createDinosaur(egg.species), position);
+  audio.playSparkle();
+}
+
+function spawnPoop(dinosaur) {
+  const direction = new THREE.Vector3(0, 0, -1)
+    .applyQuaternion(dinosaur.object3d.quaternion)
+    .multiplyScalar(Math.max(0.7, dinosaur.size * 0.8));
+  const x = dinosaur.object3d.position.x + direction.x;
+  const z = dinosaur.object3d.position.z + direction.z;
+  addEntity(createPoop(), groundPosition(x, z));
+}
+
+function clearEntities() {
+  for (const entity of [...entities]) destroyEntity(entity);
+  pendingRemovals.clear();
+  for (const kind in counts) counts[kind] = 0;
+}
+
+function applyWorldPreset(preset) {
+  currentPreset = PRESET_ENTITIES[preset] ? preset : 'park';
+  clearEntities();
+  terrain.generate(currentPreset);
+  for (const [kind, x, z] of PRESET_ENTITIES[currentPreset]) {
+    placePresetEntity(kind, x, z);
+  }
+}
+
+const actions = {
+  sculpt: (point, dir) => {
+    terrain.sculpt(point, dir);
+    audio.playDig(dir);
+  },
+  place: placeEntity,
+};
+
+// ---------------- 输入 ----------------
+const input = new Input({
+  dom: stage.renderer.domElement,
+  camera: stage.camera,
+  controls: stage.controls,
+  terrain,
+  water,
+  tools,
+  actions,
+});
+
+// ---------------- 顶部动作 ----------------
+function onAction(id) {
+  if (id === 'daynight') {
+    sky.cycle();
+    audio.playWhoosh();
+  } else if (id === 'rain') {
+    weather.toggleRain(audio);
+  } else if (id === 'rainbow') {
+    weather.showRainbow(audio);
+  }
+}
+
+function resetWorld() {
+  applyWorldPreset(currentPreset);
+  weather.reset(audio);
+  sky.reset();
+}
+
+new Toolbar({ tools, audio, onAction, onReset: resetWorld });
+
+// ---------------- 开始（解锁声音） ----------------
+const splash = document.getElementById('splash');
+for (const card of document.querySelectorAll('.preset-card')) {
+  card.addEventListener('click', () => {
+    for (const other of document.querySelectorAll('.preset-card')) {
+      other.classList.toggle('selected', other === card);
+    }
+    applyWorldPreset(card.dataset.preset);
+  });
+}
+applyWorldPreset(currentPreset);
+
+document.getElementById('start-btn').addEventListener('click', () => {
+  applyWorldPreset(currentPreset);
+  audio.unlock();
+  splash.classList.add('hidden');
+});
+
+// ---------------- 主循环 ----------------
+const ctx = {
+  terrain,
+  seaLevel: SEA_LEVEL,
+  entities,
+  audio,
+  removeEntity: requestRemove,
+  createNest,
+  layEgg,
+  hatchEgg,
+  spawnPoop,
+  time: 0,
+};
+const clock = new THREE.Clock();
+
+function loop() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  ctx.time += dt;
+  input.update();
+  water.update(ctx.time);
+  sky.update(dt, ctx.time);
+  weather.update(dt);
+  for (const e of entities) e.update(dt, ctx);
+  flushRemovals();
+  stage.render();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// 调试/测试句柄（无害，方便冒烟测试核对渲染与实体数量）
+window.__world = {
+  stage,
+  terrain,
+  entities,
+  counts,
+  removeEntity: requestRemove,
+  createNest,
+  layEgg,
+  hatchEgg,
+};

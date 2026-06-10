@@ -1,0 +1,343 @@
+:root {
+  --ink: #5a4a6a;
+  --candy-pink: #ffd1e3;
+  --candy-blue: #bfe3ff;
+  --candy-yellow: #fff0b3;
+  --candy-green: #c8f3c0;
+  --btn: #ffffff;
+  --btn-active: #ffe27a;
+  --shadow: rgba(120, 90, 140, 0.28);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #cdeffb;
+  font-family: "PingFang SC", "Heiti SC", "Microsoft YaHei", "Comic Sans MS",
+    system-ui, sans-serif;
+  color: var(--ink);
+  touch-action: none;
+}
+
+#scene {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ---------------- 底部工具栏 ---------------- */
+#toolbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  margin-inline: auto;
+  width: min(920px, 96vw);
+  max-width: 96vw;
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(8px);
+  border-radius: 28px;
+  box-shadow: 0 8px 24px var(--shadow);
+  flex-wrap: wrap;
+  justify-content: center;
+  z-index: 10;
+}
+
+/* ---------------- 顶部按钮 ---------------- */
+#top-bar {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  right: 12px;
+  display: flex;
+  gap: 10px;
+  z-index: 10;
+}
+
+.population-status {
+  position: fixed;
+  top: max(84px, calc(env(safe-area-inset-top) + 72px));
+  right: 12px;
+  z-index: 10;
+  padding: 8px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 5px 14px var(--shadow);
+  color: #4f8b55;
+  font-size: 15px;
+  font-weight: 800;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.population-status.warning {
+  color: #9a6a00;
+  background: rgba(255, 239, 166, 0.9);
+}
+
+.population-status.danger {
+  color: #a83248;
+  background: rgba(255, 200, 210, 0.92);
+}
+
+.tool-btn {
+  width: 72px;
+  height: 72px;
+  border: none;
+  border-radius: 22px;
+  background: var(--btn);
+  box-shadow: 0 5px 0 #e3d4ef, 0 8px 16px var(--shadow);
+  font-size: 34px;
+  line-height: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+
+.tool-btn .label {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.dinosaur-icon {
+  width: 42px;
+  height: 42px;
+  display: block;
+}
+
+.tool-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 #e3d4ef, 0 4px 8px var(--shadow);
+}
+
+.tool-btn.selected {
+  background: var(--btn-active);
+  transform: translateY(-4px) scale(1.06);
+  box-shadow: 0 9px 0 #e9c84a, 0 12px 20px var(--shadow);
+  animation: bounce 0.9s ease-in-out infinite alternate;
+}
+
+.top-btn {
+  width: 60px;
+  height: 60px;
+  font-size: 28px;
+  border-radius: 20px;
+}
+
+@keyframes bounce {
+  from {
+    transform: translateY(-4px) scale(1.06);
+  }
+  to {
+    transform: translateY(-9px) scale(1.06);
+  }
+}
+
+@media (max-width: 560px) {
+  #toolbar {
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .tool-btn {
+    width: 52px;
+    height: 54px;
+    font-size: 28px;
+    border-radius: 16px;
+  }
+  .tool-btn .label {
+    font-size: 10px;
+    letter-spacing: 0;
+  }
+  .dinosaur-icon {
+    width: 32px;
+    height: 32px;
+  }
+  .top-btn {
+    width: 50px;
+    height: 50px;
+    font-size: 24px;
+  }
+
+  .population-status {
+    top: max(72px, calc(env(safe-area-inset-top) + 60px));
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+}
+
+/* ---------------- 开始引导 ---------------- */
+#splash {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 35%, #fff7d6 0%, #ffd1e3 55%, #bfe3ff 100%);
+  transition: opacity 0.6s ease;
+}
+
+#splash.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash-card {
+  text-align: center;
+  width: min(760px, 94vw);
+  padding: 24px 30px 28px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 36px;
+  box-shadow: 0 14px 40px var(--shadow);
+  animation: pop 0.5s cubic-bezier(0.18, 1.4, 0.4, 1);
+}
+
+.splash-emoji {
+  font-size: 54px;
+  animation: bounce 1.1s ease-in-out infinite alternate;
+}
+
+.splash-card h1 {
+  font-size: 38px;
+  margin: 8px 0 6px;
+  color: #ff7aa8;
+  text-shadow: 2px 2px 0 #fff;
+}
+
+.splash-card p {
+  font-size: 18px;
+  margin-bottom: 16px;
+  color: var(--ink);
+}
+
+.preset-list {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.preset-card {
+  min-width: 0;
+  padding: 12px 8px;
+  border: 3px solid transparent;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--ink);
+  box-shadow: 0 5px 0 #e3d4ef;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.preset-card.selected {
+  border-color: #ffbf3f;
+  background: #fff6c9;
+  transform: translateY(-4px);
+}
+
+.preset-card span,
+.preset-card strong,
+.preset-card small {
+  display: block;
+}
+
+.preset-icon {
+  font-size: 34px;
+  margin-bottom: 4px;
+}
+
+.preset-card strong {
+  font-size: 16px;
+}
+
+.preset-card small {
+  margin-top: 3px;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+#start-btn {
+  font-family: inherit;
+  font-size: 30px;
+  font-weight: 800;
+  color: #fff;
+  border: none;
+  border-radius: 30px;
+  padding: 16px 40px;
+  background: linear-gradient(#ffd25a, #ff9f43);
+  box-shadow: 0 7px 0 #e07d2a, 0 10px 20px var(--shadow);
+  cursor: pointer;
+  letter-spacing: 2px;
+}
+
+@media (max-width: 560px) {
+  .splash-card {
+    padding: 18px 14px 22px;
+  }
+
+  .splash-emoji {
+    font-size: 42px;
+  }
+
+  .splash-card h1 {
+    font-size: 31px;
+  }
+
+  .splash-card p {
+    font-size: 15px;
+  }
+
+  .preset-list {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .preset-card {
+    padding: 8px 6px;
+  }
+
+  .preset-icon {
+    font-size: 27px;
+  }
+
+  #start-btn {
+    font-size: 24px;
+    padding: 12px 32px;
+  }
+}
+
+#start-btn:active {
+  transform: translateY(4px);
+  box-shadow: 0 3px 0 #e07d2a;
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
