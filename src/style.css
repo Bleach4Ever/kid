@@ -68,6 +68,35 @@ body {
   z-index: 10;
 }
 
+/* ✨ 魔法面板：第二行，点 ✨ 从顶部下滑出现；未解锁按钮直接隐藏 */
+#magic-bar {
+  position: fixed;
+  top: max(84px, calc(env(safe-area-inset-top) + 72px));
+  left: 50%;
+  display: flex;
+  gap: 10px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(8px);
+  border-radius: 24px;
+  box-shadow: 0 8px 24px var(--shadow);
+  z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -16px) scale(0.96);
+  transition: transform 0.28s cubic-bezier(0.18, 1.4, 0.4, 1), opacity 0.2s ease;
+}
+
+#magic-bar.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, 0) scale(1);
+}
+
+#magic-bar .tool-btn.locked {
+  display: none;
+}
+
 .population-status {
   position: fixed;
   top: max(84px, calc(env(safe-area-inset-top) + 72px));
@@ -316,6 +345,12 @@ body {
     width: 50px;
     height: 50px;
     font-size: 24px;
+  }
+
+  #magic-bar {
+    top: max(72px, calc(env(safe-area-inset-top) + 62px));
+    gap: 6px;
+    padding: 6px 8px;
   }
 
   .population-status {

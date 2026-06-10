@@ -15,12 +15,22 @@ export const TOOLS = [
   { id: 'pterosaur', icon: './icons/pterosaur.svg', label: 'tool.pterosaur', type: 'place', kind: 'pterosaur' },
 ];
 
-// 点一下立刻触发的动作（顶部按钮）
+// 点一下立刻触发的动作（顶部按钮）；✨ 是魔法面板的开关
 export const ACTIONS = [
   { id: 'daynight', icon: '🌗', label: 'action.daynight' },
   { id: 'rain', icon: '🌧️', label: 'action.rain' },
-  { id: 'rainbow', icon: '🌈', label: 'action.rainbow' },
+  { id: 'magic', icon: '✨', label: 'action.magic' },
   { id: 'pedia', icon: '📖', label: 'action.pedia' },
+];
+
+// ✨ 魔法面板（第二行）：unlock 对应 profile.unlocks 里的 id，未解锁直接隐藏；
+// 🌈 彩虹无 unlock 字段 = 始终可用
+export const MAGIC_ACTIONS = [
+  { id: 'rainbow', icon: '🌈', label: 'action.rainbow' },
+  { id: 'flowerRain', icon: '🌸', label: 'action.flowerRain', unlock: 'event.flowerRain' },
+  { id: 'meteor', icon: '🌠', label: 'action.meteor', unlock: 'event.meteor' },
+  { id: 'aurora', icon: '🌌', label: 'action.aurora', unlock: 'event.aurora' },
+  { id: 'volcano', icon: '🌋', label: 'action.volcano', unlock: 'event.volcano' },
 ];
 
 export class Tools {

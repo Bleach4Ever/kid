@@ -7,6 +7,7 @@ import { Sky } from './world/Sky.js';
 import { Tools } from './systems/Tools.js';
 import { Input } from './systems/Input.js';
 import { Weather } from './systems/Weather.js';
+import { WorldEvents } from './systems/WorldEvents.js';
 import { Audio } from './systems/Audio.js';
 import { Bus } from './systems/Bus.js';
 import { Particles } from './systems/Particles.js';
@@ -38,6 +39,10 @@ const tools = new Tools();
 const weather = new Weather(stage.scene, terrain);
 const bus = new Bus();
 const particles = new Particles(stage.scene);
+// ensureNight / placeEntity 都是函数声明（提升），这里先引用没问题
+const worldEvents = new WorldEvents({
+  scene: stage.scene, terrain, sky, particles, stage, ensureNight, placeEntity,
+});
 const SKY_PHASES = ['day', 'sunset', 'night'];
 
 // ---------------- 实体管理（树/花/恐龙） ----------------
@@ -324,6 +329,16 @@ function syncSkyPhase() {
   bus.emit('skyphase', { phase: ctx.skyPhase });
 }
 
+// 世界事件需要夜空时（流星雨/极光）循环到夜晚并同步 skyPhase/BGM/总线
+function ensureNight() {
+  while (ctx.skyPhase !== 'night') {
+    sky.cycle();
+    syncSkyPhase();
+  }
+}
+
+const EVENT_IDS = new Set(['flowerRain', 'meteor', 'aurora', 'volcano']);
+
 function onAction(id) {
   if (id === 'daynight') {
     sky.cycle();
@@ -333,6 +348,8 @@ function onAction(id) {
     weather.toggleRain(audio);
   } else if (id === 'rainbow') {
     weather.showRainbow(audio);
+  } else if (EVENT_IDS.has(id)) {
+    worldEvents.trigger(id, audio);
   } else if (id === 'pedia') {
     pedia.toggle();
   }
@@ -342,6 +359,7 @@ function onAction(id) {
 function resetWorld() {
   applyWorldPreset(currentPreset);
   weather.reset(audio);
+  worldEvents.reset();
   sky.reset();
   syncSkyPhase();
   saveWorld(); // 重置完成立即覆盖存档
@@ -350,6 +368,7 @@ function resetWorld() {
 const toolbar = new Toolbar({ tools, audio, onAction, onReset: resetWorld });
 const pedia = new Pedia({ bus, audio, toolbar });
 const quests = new Quests({ bus, audio });
+bus.on('unlock', () => toolbar.refreshMagic()); // 星星里程碑解锁 → 魔法面板即时刷新
 
 // ---------------- 开始（解锁声音） ----------------
 const splash = document.getElementById('splash');
@@ -416,6 +435,7 @@ function loop() {
   water.update(ctx.time);
   sky.update(dt, ctx.time);
   weather.update(dt);
+  worldEvents.update(dt);
   particles.update(dt);
   for (const e of entities) e.update(dt, ctx);
   flushRemovals();
@@ -442,6 +462,9 @@ window.__world = {
   bus,
   pedia,
   quests,
+  sky,
+  weather,
+  worldEvents,
   lastPet: 0, // 调试计数：冒烟测试验证“点恐龙=抚摸”
 };
 bus.on('pet', () => { window.__world.lastPet++; });

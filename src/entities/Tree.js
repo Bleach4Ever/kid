@@ -8,8 +8,9 @@ const trunkMat = new THREE.MeshStandardMaterial({
 const leafMats = ['#86d96a', '#6fc95a', '#9ae07f', '#57bf78', '#b6e86a'].map(
   (c) => new THREE.MeshStandardMaterial({ color: c, flatShading: true, roughness: 0.9 })
 );
-const petalColors = ['#ff8fb1', '#ffd45e', '#b58cff', '#ff7a7a', '#7ad7ff', '#ff9f5e'];
-const petalMats = petalColors.map(
+// 花瓣色板：WorldEvents 的 🌸 花瓣雨复用同一组颜色
+export const PETAL_COLORS = ['#ff8fb1', '#ffd45e', '#b58cff', '#ff7a7a', '#7ad7ff', '#ff9f5e'];
+const petalMats = PETAL_COLORS.map(
   (c) => new THREE.MeshStandardMaterial({ color: c, flatShading: true, roughness: 0.7 })
 );
 const centerMat = new THREE.MeshStandardMaterial({ color: '#ffe27a', flatShading: true });

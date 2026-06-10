@@ -70,11 +70,23 @@ for (const t of tools.slice(2)) {
   });
   await page.waitForTimeout(80);
 }
-// 顶部：昼夜、下雨、彩虹
+// 顶部：昼夜、下雨、✨（打开魔法面板）
 for (let i = 0; i < 3; i++) {
   await page.locator('#top-bar .tool-btn').nth(i).click({ force: true });
   await page.waitForTimeout(150);
 }
+// 魔法面板里点 🌈 彩虹（始终解锁），再点 ✨ 收起
+const magicFirstOpen = await page.evaluate(() => {
+  const bar = document.getElementById('magic-bar');
+  return {
+    open: bar.classList.contains('open'),
+    visibleBtns: [...bar.querySelectorAll('.tool-btn')].filter((b) => !b.classList.contains('locked')).length,
+  };
+});
+await page.locator('#magic-bar .tool-btn').nth(0).click({ force: true });
+await page.waitForTimeout(150);
+const rainbowShown = await page.evaluate(() => window.__world.weather.rainbowT > 0);
+await page.locator('#top-bar .tool-btn').nth(2).click({ force: true });
 await page.waitForTimeout(600);
 
 // 食草龙会吃掉附近植物、成长，并进入饱腹冷却
@@ -361,6 +373,83 @@ const milestone = await page.evaluate(() => {
   return { stars: p.stars, unlocks: p.unlocks };
 });
 
+// ---------------- 阶段 6：世界事件 + 魔法面板 ----------------
+// 加星到 20 → 全部 event.* 解锁（同时验证 unlock 总线 → 魔法面板刷新）
+const magicSetup = await page.evaluate(() => {
+  const w = window.__world;
+  const cur = JSON.parse(localStorage.getItem('dino-world:profile')).stars;
+  if (cur < 20) w.quests._debugAddStars(20 - cur);
+  return { unlocks: JSON.parse(localStorage.getItem('dino-world:profile')).unlocks };
+});
+// 打开 ✨ → 魔法面板滑出，5 个按钮（🌈🌸🌠🌌🌋）全部可见
+await page.locator('#top-bar .tool-btn').nth(2).click({ force: true });
+await page.waitForTimeout(350);
+const magicPanel = await page.evaluate(() => {
+  const bar = document.getElementById('magic-bar');
+  return {
+    open: bar.classList.contains('open'),
+    visibleBtns: [...bar.querySelectorAll('.tool-btn')].filter((b) => !b.classList.contains('locked')).length,
+  };
+});
+
+// 🌸 花瓣雨：按钮触发 → active；快进结束 → 自动补种，花数增加
+const flowerBefore = await page.evaluate(() => window.__world.counts.flower || 0);
+await page.locator('#magic-bar .tool-btn').nth(1).click({ force: true });
+await page.waitForTimeout(200);
+const flowerRainActive = await page.evaluate(() => window.__world.worldEvents.active);
+const flowerRainEnd = await page.evaluate(() => {
+  const w = window.__world;
+  w.worldEvents._debugFastForward(13);
+  return { active: w.worldEvents.active, flowers: w.counts.flower || 0 };
+});
+
+// 🌠 流星雨：白天触发 → 自动切到夜晚（sky.idx === 2）；快进后结束
+const meteorState = await page.evaluate(() => {
+  const w = window.__world;
+  const skyIdxBefore = w.sky.idx;
+  w.worldEvents.trigger('meteor');
+  const res = { skyIdxBefore, skyIdx: w.sky.idx, active: w.worldEvents.active };
+  w.worldEvents._debugFastForward(11);
+  res.afterActive = w.worldEvents.active;
+  return res;
+});
+
+// 🌌 极光：触发 → active；18s 快进后结束
+const auroraState = await page.evaluate(() => {
+  const w = window.__world;
+  w.worldEvents.trigger('aurora');
+  const active = w.worldEvents.active;
+  w.worldEvents._debugFastForward(19);
+  return { active, afterActive: w.worldEvents.active };
+});
+
+// 🌋 火山：触发 → 地形最高点升高；结束后相机抖动归零
+const volcanoState = await page.evaluate(() => {
+  const w = window.__world;
+  const maxH = () => {
+    const p = w.terrain.pos;
+    let m = -Infinity;
+    for (let i = 0; i < p.count; i++) m = Math.max(m, p.getY(i));
+    return m;
+  };
+  const before = maxH();
+  const camBefore = w.stage.camera.position.clone();
+  w.worldEvents.trigger('volcano');
+  const active = w.worldEvents.active;
+  w.worldEvents._debugFastForward(11);
+  return {
+    active,
+    afterActive: w.worldEvents.active,
+    before,
+    after: maxH(),
+    camDrift: w.stage.camera.position.distanceTo(camBefore),
+  };
+});
+
+// 事件结束后渲染仍正常
+await page.waitForTimeout(400);
+const finalTriangles = await page.evaluate(() => window.__world.stage.renderer.info.render.triangles);
+
 await browser.close();
 
 console.log('canvas:', `${Math.round(canvasBox.width)}x${Math.round(canvasBox.height)}`);
@@ -384,6 +473,14 @@ console.log('pedia persists reload/reset:', pediaAfterReload, pediaAfterReset);
 console.log('quests init:', questInit);
 console.log('quest tree x5 done:', questDone);
 console.log('star milestone:', milestone);
+console.log('magic first open:', magicFirstOpen, ' rainbow via panel:', rainbowShown);
+console.log('magic setup unlocks:', magicSetup.unlocks);
+console.log('magic panel:', magicPanel);
+console.log('flower rain:', { activeOnClick: flowerRainActive, flowerBefore }, '->', flowerRainEnd);
+console.log('meteor shower:', meteorState);
+console.log('aurora:', auroraState);
+console.log('volcano:', volcanoState);
+console.log('final triangles:', finalTriangles);
 console.log('console errors:', consoleErrors.length, consoleErrors.slice(0, 8));
 console.log('page errors:', pageErrors.length, pageErrors.slice(0, 8));
 
@@ -482,6 +579,43 @@ if (questDone.stars < questInit.starsBefore + 1 || !questDone.chipText.includes(
 }
 if (milestone.stars < 3 || !milestone.unlocks.includes('egg.golden')) {
   console.error('\n❌ 3-star milestone did not unlock egg.golden in profile.unlocks');
+  process.exit(1);
+}
+if (!magicFirstOpen.open || magicFirstOpen.visibleBtns !== 1 || !rainbowShown) {
+  console.error('\n❌ magic panel should start with only 🌈 visible, and panel rainbow click must work');
+  process.exit(1);
+}
+const EVENT_UNLOCKS = ['event.flowerRain', 'event.meteor', 'event.aurora', 'event.volcano'];
+if (!EVENT_UNLOCKS.every((id) => magicSetup.unlocks.includes(id))) {
+  console.error('\n❌ 20 stars did not unlock all event.* ids');
+  process.exit(1);
+}
+if (!magicPanel.open || magicPanel.visibleBtns !== 5) {
+  console.error('\n❌ magic panel should show all 5 buttons after unlocking everything');
+  process.exit(1);
+}
+if (!flowerRainActive || flowerRainEnd.active || flowerRainEnd.flowers <= flowerBefore) {
+  console.error('\n❌ flower rain did not run / did not plant bonus flowers');
+  process.exit(1);
+}
+if (meteorState.skyIdx !== 2 || !meteorState.active || meteorState.afterActive) {
+  console.error('\n❌ meteor shower did not switch to night / did not run and end');
+  process.exit(1);
+}
+if (!auroraState.active || auroraState.afterActive) {
+  console.error('\n❌ aurora did not run / did not end');
+  process.exit(1);
+}
+if (!volcanoState.active || volcanoState.afterActive || volcanoState.after <= volcanoState.before + 0.3) {
+  console.error('\n❌ volcano did not raise the terrain peak');
+  process.exit(1);
+}
+if (volcanoState.camDrift > 0.001) {
+  console.error('\n❌ camera shake offset was not removed after volcano ended');
+  process.exit(1);
+}
+if (finalTriangles < 1000) {
+  console.error('\n❌ rendering broken after world events');
   process.exit(1);
 }
 console.log('\n✅ SMOKE TEST PASSED');

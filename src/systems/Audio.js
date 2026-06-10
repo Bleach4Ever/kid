@@ -341,4 +341,98 @@ export class Audio {
   click() {
     this._tone(880, 0.05, { type: 'square', peak: 0.05 });
   }
+
+  // ---------- 世界事件音效（阶段 6） ----------
+  // 🌸 花瓣雨：音乐盒琶音（重复 4 音五声音阶图案、sine、高音区、重 echo）
+  startMusicBox() {
+    if (!this.ctx || this._musicBox) return;
+    const pattern = [1046.5, 1318.5, 1567.98, 1760]; // C6 E6 G6 A6
+    let i = 0;
+    this._musicBox = setInterval(() => {
+      if (this.ctx.state !== 'running') return; // 切后台时不堆积音符
+      this._tone(pattern[i % pattern.length], 0.5, {
+        type: 'sine', peak: 0.06, dest: this.musicGain, echo: true,
+      });
+      i++;
+    }, 320);
+  }
+
+  stopMusicBox() {
+    clearInterval(this._musicBox);
+    this._musicBox = null;
+  }
+
+  // 🌠 每颗流星：柔和下行哨音 + 偶尔的高音闪烁
+  playMeteorWhistle() {
+    this._tone(1400, 0.8, { type: 'sine', peak: 0.05, slideTo: 500, echo: true });
+    if (Math.random() < 0.4) {
+      this._tone(1800, 0.14, { type: 'sine', peak: 0.04, when: 0.35, echo: true });
+    }
+  }
+
+  // 🌌 极光：空灵 pad（双失谐 sine、很低 peak、echo），持续到 stop
+  startAuroraPad() {
+    if (!this.ctx || this.auroraNode) return;
+    const t = this.ctx.currentTime;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.05, t + 2.5);
+    const o1 = this.ctx.createOscillator();
+    const o2 = this.ctx.createOscillator();
+    o1.type = 'sine';
+    o2.type = 'sine';
+    o1.frequency.value = 130.81; // C3
+    o2.frequency.value = 196.0; // G3
+    o2.detune.value = 9;
+    o1.connect(g);
+    o2.connect(g);
+    g.connect(this.musicGain);
+    g.connect(this.delay);
+    o1.start(t);
+    o2.start(t);
+    this.auroraNode = { o1, o2, g };
+  }
+
+  stopAuroraPad() {
+    if (!this.auroraNode) return;
+    const { o1, o2, g } = this.auroraNode;
+    const t = this.ctx.currentTime;
+    g.gain.cancelScheduledValues(t);
+    g.gain.setValueAtTime(Math.max(0.0001, g.gain.value), t);
+    g.gain.linearRampToValueAtTime(0.0001, t + 1.5);
+    o1.stop(t + 1.6);
+    o2.stop(t + 1.6);
+    this.auroraNode = null;
+  }
+
+  // 🌋 火山：滤波噪声隆隆（循环到 stop）+ 打击式低音 pop
+  startRumble() {
+    if (!this.ctx || this.rumbleNode) return;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this._noiseBuffer();
+    src.loop = true;
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 170;
+    const g = this.ctx.createGain();
+    g.gain.value = 0.0001;
+    g.gain.linearRampToValueAtTime(0.18, this.ctx.currentTime + 0.8);
+    src.connect(lp);
+    lp.connect(g);
+    g.connect(this.master);
+    src.start();
+    this.rumbleNode = { src, g };
+  }
+
+  stopRumble() {
+    if (!this.rumbleNode) return;
+    const { src, g } = this.rumbleNode;
+    g.gain.linearRampToValueAtTime(0.0001, this.ctx.currentTime + 0.6);
+    src.stop(this.ctx.currentTime + 0.7);
+    this.rumbleNode = null;
+  }
+
+  playVolcanoPop() {
+    this._tone(110, 0.25, { type: 'sine', peak: 0.16, slideTo: 55 });
+  }
 }

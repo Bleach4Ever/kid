@@ -41,6 +41,7 @@ const CELEBRATE_MS = 4000;
 
 export class Quests {
   constructor({ bus, audio }) {
+    this.bus = bus;
     this.audio = audio;
     this.active = [];
     this.panel = document.getElementById('quest-panel');
@@ -188,6 +189,7 @@ export class Quests {
     if (changed) {
       profile.set('unlocks', unlocks);
       this._applyUnlocks(unlocks);
+      this.bus.emit('unlock', { unlocks }); // 魔法面板等监听者刷新
     }
   }
 

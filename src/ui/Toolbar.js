@@ -1,4 +1,5 @@
-import { TOOLS, ACTIONS } from '../systems/Tools.js';
+import { TOOLS, ACTIONS, MAGIC_ACTIONS } from '../systems/Tools.js';
+import { profile } from '../systems/Profile.js';
 import { t, onLangChange } from '../i18n.js';
 
 function makeBtn(icon, labelKey, small) {
@@ -57,12 +58,31 @@ export class Toolbar {
       b.title = t(a.label);
       b.addEventListener('click', () => {
         audio.click();
+        if (a.id === 'magic') this.toggleMagic(); // ✨ 是面板开关，开/关都走这里
         onAction(a.id);
       });
       top.appendChild(b);
       this.actionBtns[a.id] = b;
       this._allBtns.push(b);
     }
+
+    // ✨ 魔法面板（第二行）：按钮一次性全部创建，未解锁的用 .locked 直接隐藏
+    this.magicBar = document.getElementById('magic-bar');
+    this.magicBtns = [];
+    for (const a of MAGIC_ACTIONS) {
+      const b = makeBtn(a.icon, '', true);
+      b._titleKey = a.label;
+      b.title = t(a.label);
+      b._unlock = a.unlock || null;
+      b.addEventListener('click', () => {
+        audio.click();
+        onAction(a.id);
+      });
+      this.magicBar.appendChild(b);
+      this.magicBtns.push(b);
+      this._allBtns.push(b);
+    }
+    this.refreshMagic();
 
     this.soundBtn = makeBtn('🔊', '', true);
     this.soundBtn._titleKey = 'top.sound';
@@ -91,6 +111,18 @@ export class Toolbar {
   // 顶部动作按钮的“未读”脉冲红点（如图鉴有新解锁）
   setBadge(id, on) {
     this.actionBtns[id]?.classList.toggle('has-badge', !!on);
+  }
+
+  toggleMagic() {
+    this.magicBar.classList.toggle('open');
+  }
+
+  // 解锁变化时刷新可见按钮（面板开着也即时生效）
+  refreshMagic() {
+    const unlocks = profile.get('unlocks', []);
+    for (const b of this.magicBtns) {
+      b.classList.toggle('locked', !!b._unlock && !unlocks.includes(b._unlock));
+    }
   }
 
   refreshLabels() {
