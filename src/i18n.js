@@ -39,6 +39,8 @@ const DICTS = {
     'top.sound': '声音开关',
     'top.reset': '重新开始',
     'population.count': '🦕 恐龙 {n} / {max}',
+    'quest.title': '小任务',
+    'quest.stars': '我的星星',
   },
   en: {
     'title': 'My Little World',
@@ -77,6 +79,8 @@ const DICTS = {
     'top.sound': 'Sound On/Off',
     'top.reset': 'Start Over',
     'population.count': '🦕 Dinos {n} / {max}',
+    'quest.title': 'Little Quests',
+    'quest.stars': 'My Stars',
   },
 };
 

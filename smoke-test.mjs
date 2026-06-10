@@ -315,6 +315,52 @@ const pediaAfterReset = await page.evaluate(
   () => !!JSON.parse(localStorage.getItem('dino-world:profile')).pedia?.raptor?.seen
 );
 
+// ---------------- 阶段 5：温和任务 + 星星 + 解锁 ----------------
+// 会话固定 3 个活跃任务；强制第 0 个换成「种树×5」，种 5 棵 → 完成 + 星数 +1 + 芯片更新
+const questInit = await page.evaluate(() => {
+  const w = window.__world;
+  w.__testQuest = w.quests._debugSet('tree');
+  // 锁住饥饿 + 挪去角落，确保点击落在地形上而非抚摸
+  for (const e of w.entities) {
+    if (e.isDinosaur) {
+      e.hungerTimer = 999;
+      e.target = null;
+      if (!e.flying) e.object3d.position.set(-14 + Math.random() * 4, 0, -10 + Math.random() * 4);
+    }
+  }
+  return {
+    active: w.quests.active.length,
+    chips: document.querySelectorAll('#quest-panel .quest-chip').length,
+    starsBefore: JSON.parse(localStorage.getItem('dino-world:profile')).stars || 0,
+  };
+});
+await page.locator('#toolbar .tool-btn').nth(2).click({ force: true }); // 种树
+for (let i = 0; i < 5; i++) {
+  await page.mouse.click(430 + i * 24, 380);
+  await page.waitForTimeout(120);
+}
+await page.waitForTimeout(300);
+const questDone = await page.evaluate(() => {
+  const w = window.__world;
+  const stars = JSON.parse(localStorage.getItem('dino-world:profile')).stars;
+  return {
+    done: w.__testQuest.done,
+    dotsOn: w.__testQuest.el.querySelectorAll('.q-dots i.on').length,
+    flippedToStar: w.__testQuest.el.querySelector('.q-icon').textContent === '⭐',
+    stars,
+    chipText: document.getElementById('star-chip').textContent,
+  };
+});
+
+// 强制星数到 3 → egg.golden 解锁写入 profile.unlocks
+const milestone = await page.evaluate(() => {
+  const w = window.__world;
+  const cur = JSON.parse(localStorage.getItem('dino-world:profile')).stars;
+  if (cur < 3) w.quests._debugAddStars(3 - cur);
+  const p = JSON.parse(localStorage.getItem('dino-world:profile'));
+  return { stars: p.stars, unlocks: p.unlocks };
+});
+
 await browser.close();
 
 console.log('canvas:', `${Math.round(canvasBox.width)}x${Math.round(canvasBox.height)}`);
@@ -335,6 +381,9 @@ console.log('pedia unlock:', pediaUnlock);
 console.log('pedia modal:', pediaModal);
 console.log('pedia close + place:', beforePlaceCount, '->', afterPlaceCount);
 console.log('pedia persists reload/reset:', pediaAfterReload, pediaAfterReset);
+console.log('quests init:', questInit);
+console.log('quest tree x5 done:', questDone);
+console.log('star milestone:', milestone);
 console.log('console errors:', consoleErrors.length, consoleErrors.slice(0, 8));
 console.log('page errors:', pageErrors.length, pageErrors.slice(0, 8));
 
@@ -416,6 +465,23 @@ if (!beforePlaceCount.modalHidden || afterPlaceCount <= beforePlaceCount.entitie
 }
 if (!pediaAfterReload || !pediaAfterReset) {
   console.error('\n❌ pedia unlocks did not survive reload / world reset');
+  process.exit(1);
+}
+if (questInit.active !== 3 || questInit.chips !== 3) {
+  console.error('\n❌ quest panel should always hold 3 active quests');
+  process.exit(1);
+}
+if (!questDone.done || questDone.dotsOn !== 5 || !questDone.flippedToStar) {
+  console.error('\n❌ tree x5 quest did not progress/complete');
+  process.exit(1);
+}
+// 期间可能有其它任务顺带完成，用 >= 判断；芯片文本必须和 profile 星数一致
+if (questDone.stars < questInit.starsBefore + 1 || !questDone.chipText.includes(String(questDone.stars))) {
+  console.error('\n❌ quest completion did not award star / update star chip');
+  process.exit(1);
+}
+if (milestone.stars < 3 || !milestone.unlocks.includes('egg.golden')) {
+  console.error('\n❌ 3-star milestone did not unlock egg.golden in profile.unlocks');
   process.exit(1);
 }
 console.log('\n✅ SMOKE TEST PASSED');

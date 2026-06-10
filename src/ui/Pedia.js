@@ -4,6 +4,7 @@
 import { SPECIES } from '../entities/Dinosaur.js';
 import { EGG_STYLES } from '../entities/Ecosystem.js';
 import { profile } from '../systems/Profile.js';
+import { showToast } from './Toast.js';
 import { t } from '../i18n.js';
 
 const DIET_ICONS = { herbivore: '🌿', carnivore: '🍖', egg: '🥚', none: '🪽' };
@@ -30,7 +31,6 @@ export class Pedia {
     this.audio = audio;
     this.toolbar = toolbar;
     this.root = document.getElementById('pedia-modal');
-    this.toasts = document.getElementById('pedia-toasts');
     // 点遮罩空白处关闭（不挡住后面的世界继续运行）
     this.root.addEventListener('click', (e) => {
       if (e.target === this.root) this.close();
@@ -114,17 +114,12 @@ export class Pedia {
     return card;
   }
 
-  // 顶部滑入吐司：物种图标 + 印章图标 + 闪光，2.5s 后自动消失
+  // 顶部滑入吐司：物种图标 + 印章图标 + 闪光（通用 Toast 模块承担动画与销毁）
   _toast(species, stamp) {
-    const toast = el('div', 'pedia-toast', this.toasts);
-    const img = el('img', '', toast);
-    img.src = `./icons/${species}.svg`;
-    img.alt = t(`tool.${species}`);
-    el('span', 'stamp', toast).textContent = STAMPS.find((s) => s.key === stamp).icon;
-    el('span', 'spark', toast).textContent = '✨';
-    setTimeout(() => {
-      toast.classList.add('out');
-      setTimeout(() => toast.remove(), 400);
-    }, 2500);
+    showToast([
+      { img: `./icons/${species}.svg`, alt: t(`tool.${species}`) },
+      { text: STAMPS.find((s) => s.key === stamp).icon, cls: 'stamp' },
+      { text: '✨', cls: 'spark' },
+    ]);
   }
 }

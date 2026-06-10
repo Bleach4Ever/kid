@@ -10,6 +10,19 @@ export const EGG_STYLES = {
   oviraptor: { shell: '#ffe28b', spot: '#df7d37', pattern: 'crest' },
   pterosaur: { shell: '#bfe7ff', spot: '#4d91c0', pattern: 'wings' },
 };
+// 星星里程碑（egg.golden）解锁后的华丽蛋配色：金色 / 星斑 / 彩虹斑——纯颜色数据零资产
+const FANCY_EGG_STYLES = [
+  { shell: '#ffd96b', spots: ['#f5a623'] },
+  { shell: '#fff8e1', spots: ['#ffd24a', '#b9a4ff', '#ffd24a', '#ff9ec4'] },
+  { shell: '#fdf2ff', spots: ['#ff8fa3', '#ffd166', '#7fd6a4', '#7fb9ff'] },
+];
+let fancyEggsUnlocked = false;
+
+// Quests 在 egg.golden 解锁后调用：之后 25% 的新蛋随机使用华丽配色
+export function setFancyEggs(on) {
+  fancyEggsUnlocked = !!on;
+}
+
 const nestBaseMat = new THREE.MeshStandardMaterial({
   color: '#a66b3e',
   flatShading: true,
@@ -57,8 +70,11 @@ function addEggMark(group, style, mat) {
 export function createEgg(species, nest = null, dropTarget = null) {
   const group = new THREE.Group();
   const style = EGG_STYLES[species] || EGG_STYLES.triceratops;
-  const shellMat = makeMat(style.shell);
-  const spotMat = makeMat(style.spot);
+  const fancy = fancyEggsUnlocked && Math.random() < 0.25
+    ? FANCY_EGG_STYLES[(Math.random() * FANCY_EGG_STYLES.length) | 0]
+    : null;
+  const shellMat = makeMat(fancy ? fancy.shell : style.shell);
+  const spotMat = makeMat(fancy ? fancy.spots[0] : style.spot);
   const shell = new THREE.Mesh(
     new THREE.IcosahedronGeometry(0.48, 2),
     shellMat
@@ -69,7 +85,9 @@ export function createEgg(species, nest = null, dropTarget = null) {
   group.add(shell);
 
   for (let i = 0; i < 4; i++) {
-    const spot = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07, 0), spotMat);
+    // 彩虹/星斑配色：每颗斑点轮换颜色；普通蛋共用一种斑点材质
+    const mat = fancy && fancy.spots.length > 1 ? makeMat(fancy.spots[i % fancy.spots.length]) : spotMat;
+    const spot = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07, 0), mat);
     const angle = (i / 4) * Math.PI * 2;
     spot.position.set(Math.cos(angle) * 0.39, 0.55 + (i % 2) * 0.18, Math.sin(angle) * 0.39);
     group.add(spot);
@@ -85,6 +103,7 @@ export function createEgg(species, nest = null, dropTarget = null) {
     kind: 'egg',
     species,
     nest,
+    fancy: !!fancy, // 调试/测试可见：是否华丽配色
     isEgg: true,
     alive: true,
     consumed: false,

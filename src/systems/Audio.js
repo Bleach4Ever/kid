@@ -280,6 +280,15 @@ export class Audio {
     this._tone(1046.5, 1.0, { type: 'sine', peak: 0.1, when: notes.length * 0.12, echo: true });
   }
 
+  // 任务完成号角：C-E-G-C 大调琶音（triangle）+ 低音 sine 根音垫底，约 0.8s
+  playFanfare() {
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((f, i) =>
+      this._tone(f, 0.26, { type: 'triangle', peak: 0.13, when: i * 0.13, echo: true })
+    );
+    this._tone(261.63, 0.8, { type: 'sine', peak: 0.1, echo: true });
+  }
+
   // 昼夜切换：柔和的“呼”一声
   playWhoosh() {
     if (!this.ctx) return;

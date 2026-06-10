@@ -93,6 +93,146 @@ body {
   background: rgba(255, 200, 210, 0.92);
 }
 
+/* ---------------- 温和任务芯片（左上角竖排） + 星星 ---------------- */
+#quest-panel {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  left: 12px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.quest-chip {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 13px 7px 9px;
+  background: rgba(255, 255, 255, 0.78);
+  border-radius: 18px;
+  box-shadow: 0 5px 14px var(--shadow);
+  animation: pop 0.4s cubic-bezier(0.18, 1.4, 0.4, 1);
+}
+
+.quest-chip .q-icon {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.quest-chip .q-icon img {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+
+/* 物种任务的小角标（如 🐣 = 孵出这只恐龙） */
+.quest-chip .q-badge {
+  position: absolute;
+  right: -7px;
+  bottom: -4px;
+  font-size: 13px;
+  font-style: normal;
+}
+
+.q-dots {
+  display: flex;
+  gap: 5px;
+}
+
+.q-dots i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #f1eaf6;
+  box-shadow: inset 0 0 0 2px #ddcfe8;
+}
+
+.q-dots i.on {
+  background: #ffc83d;
+  box-shadow: inset 0 0 0 2px #f0a818;
+  animation: dot-pop 0.35s cubic-bezier(0.18, 1.6, 0.4, 1);
+}
+
+@keyframes dot-pop {
+  0% {
+    transform: scale(0.2);
+  }
+  60% {
+    transform: scale(1.5);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 完成：芯片翻转成 ⭐ */
+.quest-chip.done {
+  background: var(--candy-yellow);
+  box-shadow: 0 5px 14px var(--shadow), 0 0 0 3px #ffe27a inset;
+  animation: chip-flip 0.55s ease;
+}
+
+@keyframes chip-flip {
+  0% {
+    transform: rotateY(0);
+  }
+  50% {
+    transform: rotateY(90deg) scale(1.12);
+  }
+  100% {
+    transform: rotateY(0);
+  }
+}
+
+/* 星星计数芯片（人口计数下方） */
+.star-chip {
+  position: fixed;
+  top: max(130px, calc(env(safe-area-inset-top) + 118px));
+  right: 12px;
+  z-index: 10;
+  padding: 8px 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 5px 14px var(--shadow);
+  color: #c2860a;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.star-chip.pop {
+  animation: star-pop 0.45s cubic-bezier(0.18, 1.6, 0.4, 1);
+}
+
+@keyframes star-pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.35);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 任务完成后飞向计数芯片的 ⭐（JS 设置 transform 触发过渡） */
+.star-fly {
+  position: fixed;
+  z-index: 70;
+  font-size: 26px;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition: transform 0.8s cubic-bezier(0.5, -0.15, 0.55, 1), opacity 0.8s ease;
+}
+
 .tool-btn {
   position: relative; /* 红点徽标定位锚点 */
   width: 72px;
@@ -180,6 +320,34 @@ body {
 
   .population-status {
     top: max(72px, calc(env(safe-area-inset-top) + 60px));
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .quest-chip {
+    gap: 6px;
+    padding: 5px 9px 5px 7px;
+    border-radius: 14px;
+  }
+  .quest-chip .q-icon {
+    width: 24px;
+    height: 24px;
+    font-size: 18px;
+  }
+  .quest-chip .q-icon img {
+    width: 22px;
+    height: 22px;
+  }
+  .quest-chip .q-badge {
+    font-size: 11px;
+  }
+  .q-dots i {
+    width: 9px;
+    height: 9px;
+  }
+
+  .star-chip {
+    top: max(108px, calc(env(safe-area-inset-top) + 96px));
     padding: 6px 10px;
     font-size: 12px;
   }

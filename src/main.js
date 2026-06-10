@@ -12,6 +12,7 @@ import { Bus } from './systems/Bus.js';
 import { Particles } from './systems/Particles.js';
 import { Toolbar } from './ui/Toolbar.js';
 import { Pedia } from './ui/Pedia.js';
+import { Quests } from './systems/Quests.js';
 import { encodeHeightsI16, decodeHeightsI16 } from './systems/Storage.js';
 import { loadSave, clearSave, serializeWorld, hasSave } from './systems/SaveGame.js';
 import { initLang, t, setLang, getLang, onLangChange, applyDom } from './i18n.js';
@@ -348,6 +349,7 @@ function resetWorld() {
 
 const toolbar = new Toolbar({ tools, audio, onAction, onReset: resetWorld });
 const pedia = new Pedia({ bus, audio, toolbar });
+const quests = new Quests({ bus, audio });
 
 // ---------------- 开始（解锁声音） ----------------
 const splash = document.getElementById('splash');
@@ -439,6 +441,7 @@ window.__world = {
   hasSave,
   bus,
   pedia,
+  quests,
   lastPet: 0, // 调试计数：冒烟测试验证“点恐龙=抚摸”
 };
 bus.on('pet', () => { window.__world.lastPet++; });
