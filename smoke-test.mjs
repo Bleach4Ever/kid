@@ -202,27 +202,34 @@ const mosasaurState = await page.evaluate(async () => {
 
 await page.screenshot({ path: 'smoke.png' });
 
-// 键盘视角：方向键平移 + Q/E 旋转（鼠标/触摸不受影响）
-const camBeforeKeys = await page.evaluate(() => ({
-  x: window.__world.stage.controls.target.x,
-  az: window.__world.stage.controls.getAzimuthalAngle(),
-}));
-await page.keyboard.down('ArrowRight');
-await page.waitForTimeout(300);
-await page.keyboard.up('ArrowRight');
-await page.keyboard.down('KeyQ');
-await page.waitForTimeout(300);
-await page.keyboard.up('KeyQ');
-await page.waitForTimeout(60);
-const camAfterKeys = await page.evaluate(() => ({
-  x: window.__world.stage.controls.target.x,
-  az: window.__world.stage.controls.getAzimuthalAngle(),
-}));
+// 相机平移：WASD/方向键 + 鼠标边缘自动移动；Q/E 旋转（鼠标拖拽/触摸不受影响）
+// 轮询直到效果超过阈值（软件渲染帧率低，避免固定等待的脆弱性）
+const readX = () => page.evaluate(() => window.__world.stage.controls.target.x);
+const readAz = () => page.evaluate(() => window.__world.stage.controls.getAzimuthalAngle());
+async function holdUntil(down, up, read, threshold, timeout = 5000) {
+  const before = await read();
+  await down();
+  const t0 = Date.now();
+  let delta = 0;
+  while (Date.now() - t0 < timeout) {
+    await page.waitForTimeout(120);
+    delta = Math.abs((await read()) - before);
+    if (delta > threshold) break;
+  }
+  await up();
+  await page.waitForTimeout(60);
+  return delta;
+}
 const keyboardCam = {
-  pan: Math.abs(camAfterKeys.x - camBeforeKeys.x),
-  rot: Math.abs(camAfterKeys.az - camBeforeKeys.az),
+  wasdPan: await holdUntil(() => page.keyboard.down('KeyD'), () => page.keyboard.up('KeyD'), readX, 0.5),
+  edgePan: await holdUntil(() => page.mouse.move(996, 350), () => page.mouse.move(500, 380), readX, 0.5),
+  rot: await holdUntil(() => page.keyboard.down('KeyQ'), () => page.keyboard.up('KeyQ'), readAz, 0.05),
 };
-console.log('keyboard cam:', { pan: keyboardCam.pan.toFixed(2), rot: keyboardCam.rot.toFixed(3) });
+console.log('camera move:', {
+  wasdPan: keyboardCam.wasdPan.toFixed(2),
+  edgePan: keyboardCam.edgePan.toFixed(2),
+  rot: keyboardCam.rot.toFixed(3),
+});
 
 // 陆生龙不进水：放进岸边浅水会自己爬回陆地（翼龙/沧龙不受影响）
 const landEscape = await page.evaluate(() => {
@@ -245,18 +252,41 @@ const landEscape = await page.evaluate(() => {
   window.__escapeId = w.entities.indexOf(dino);
   return { found: true, startUnderwater: w.terrain.getHeightAt(wx, wz) < w.seaLevel };
 });
-await page.waitForTimeout(3000);
-const landEscapeAfter = await page.evaluate(() => {
+const landEscapeAfter = await page.evaluate(async () => {
   const w = window.__world;
   const dino = w.entities[window.__escapeId];
   if (!dino) return { gone: true };
   const p = dino.object3d.position;
+  // 轮询等它爬上岸（爬行是游戏时间；软件渲染帧率低，用真实时间轮询而非固定等待）
+  const t0 = performance.now();
+  while (performance.now() - t0 < 8000 && w.terrain.getHeightAt(p.x, p.z) < w.seaLevel) {
+    await new Promise((r) => setTimeout(r, 100));
+  }
   const onLand = w.terrain.getHeightAt(p.x, p.z) >= w.seaLevel;
   const swimming = !!dino.swimming;
   w.removeEntity(dino); // 清理：不影响后续上限计数
   return { onLand, swimming };
 });
 console.log('land dino escape:', landEscape, '->', landEscapeAfter);
+
+// 水里的鱼：环境鱼群应在水中生成、贴着水面（翼龙俯冲捕食 / 沧龙口粮的对象）
+await page.evaluate(() => window.__world.fishSchool._debugFill());
+await page.waitForTimeout(350); // 让鱼跑一帧贴到水面
+const fishCheck = await page.evaluate(() => {
+  const w = window.__world;
+  let total = 0;
+  let inWater = 0;
+  let atSurface = 0;
+  for (const e of w.entities) {
+    if (e.kind !== 'fish' || !e.alive) continue;
+    total++;
+    const p = e.object3d.position;
+    if (w.terrain.getHeightAt(p.x, p.z) < w.seaLevel) inWater++;
+    if (Math.abs(p.y - w.seaLevel) < 0.6) atSurface++;
+  }
+  return { total, inWater, atSurface };
+});
+console.log('fish school:', fishCheck);
 
 // i18n：切到英文 → 工具栏标签/标题立即变化
 const i18nState = await page.evaluate(() => {
@@ -671,7 +701,12 @@ const mysteryOpen = await page.evaluate(async () => {
   const openedBefore = w.profile.get('mystery').opened;
   const dinosBefore = w.entities.filter((e) => e.isDinosaur && e.alive).length;
   egg.pet();
-  await new Promise((r) => setTimeout(r, 1100));
+  // 轮询等开壳（开壳是 0.5s 游戏时间；软件渲染帧率低，用真实时间轮询而非固定等待）
+  const t0 = performance.now();
+  while (performance.now() - t0 < 5000 && egg.alive) {
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  await new Promise((r) => setTimeout(r, 400)); // 让孵出的恐龙入世界
   return {
     spawned,
     eggGone: !egg.alive,
@@ -811,6 +846,13 @@ const settingsClosed = await page.evaluate(() =>
   document.getElementById('settings-modal').classList.contains('hidden'));
 
 // 树共享几何：放 10 棵树 → geometry.userData.shared，draw calls 增量宽松 ≤ 12
+// 先清掉环境鱼群并暂停其调度，避免鱼的 draw call 污染本次“只测树”的增量
+await page.evaluate(() => {
+  const w = window.__world;
+  for (const e of w.entities) if (e.kind === 'fish') w.removeEntity(e);
+  w.fishSchool.timer = 1e9;
+});
+await page.waitForTimeout(150); // 让移除生效并渲染一帧
 const callsBefore = await page.evaluate(() => window.__world.stage.renderer.info.render.calls);
 const treeShared = await page.evaluate(() => {
   const w = window.__world;
@@ -1247,12 +1289,16 @@ if (capRestore.alive > capRestore.cap) {
   console.error('\n❌ restoreWorld exceeded the dino hard cap', capRestore);
   process.exit(1);
 }
-if (keyboardCam.pan < 0.5 || keyboardCam.rot < 0.05) {
-  console.error('\n❌ keyboard camera had no effect (arrows should pan, Q should rotate)', keyboardCam);
+if (keyboardCam.wasdPan < 0.5 || keyboardCam.edgePan < 0.5 || keyboardCam.rot < 0.05) {
+  console.error('\n❌ camera move broken (WASD pan / mouse-edge scroll / Q rotate)', keyboardCam);
   process.exit(1);
 }
 if (!landEscape.found || !landEscape.startUnderwater || !landEscapeAfter.onLand || landEscapeAfter.swimming) {
   console.error('\n❌ land dinosaur did not climb out of the water', { landEscape, landEscapeAfter });
+  process.exit(1);
+}
+if (fishCheck.total < 8 || fishCheck.inWater !== fishCheck.total || fishCheck.atSurface < 1) {
+  console.error('\n❌ fish did not populate the water at the surface', fishCheck);
   process.exit(1);
 }
 console.log('\n✅ SMOKE TEST PASSED');

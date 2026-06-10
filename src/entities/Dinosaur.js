@@ -6,6 +6,7 @@ import { VARIANTS } from './Variants.js';
 const BOUND = WORLD_SIZE * 0.46;
 const eyeMat = new THREE.MeshStandardMaterial({ color: '#30283a', roughness: 0.7 });
 const toothMat = new THREE.MeshStandardMaterial({ color: '#fff8df', flatShading: true });
+const catchFishMat = new THREE.MeshStandardMaterial({ color: '#ff9e6b', flatShading: true, roughness: 0.7 });
 const zzzMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85, depthTest: false });
 const HEART_COLORS = ['#ff6f9c', '#ff9ec4', '#ffd3e2'];
 
@@ -201,7 +202,10 @@ function buildPterosaur(bodyMat, accentMat) {
     wings.push(wing);
   }
   addTail(g, bodyMat, [0, 0, -0.76], 0.75, 0.12);
-  return { group: g, wings, stepParts: [] };
+  // 嘴里叼的小鱼：俯冲叼起后、上升途中才显示
+  const caught = mesh(new THREE.IcosahedronGeometry(0.12, 1), catchFishMat, g, [0, -0.12, 1.12], [0.7, 0.7, 1.5]);
+  caught.visible = false;
+  return { group: g, wings, catch: caught, stepParts: [] };
 }
 
 function buildOviraptor(bodyMat, accentMat) {
@@ -420,6 +424,21 @@ function nearestFood(self, entities) {
   return best;
 }
 
+// 离某点最近的活鱼（翼龙/沧龙捕食用）
+function nearestFishTo(pos, entities, maxDist) {
+  let best = null;
+  let bestDistance = maxDist * maxDist;
+  for (const entity of entities) {
+    if (!entity.isFish || !entity.alive || entity.consumed) continue;
+    const distance = pos.distanceToSquared(entity.object3d.position);
+    if (distance < bestDistance) {
+      best = entity;
+      bestDistance = distance;
+    }
+  }
+  return best;
+}
+
 function nearestNest(self, entities) {
   let best = null;
   let bestDistance = Infinity;
@@ -470,6 +489,7 @@ export function createDinosaur(species, saved = null, opts = {}) {
     mealsEaten: 0,
     lifeState: 'wandering',
     nestTarget: null,
+    diving: false, // 翼龙正在低空俯冲捕鱼（供沧龙判定是否跃出捕食）
   };
 
   let age = Number.isFinite(saved?.age) ? saved.age : 0;
@@ -483,6 +503,26 @@ export function createDinosaur(species, saved = null, opts = {}) {
   let layingTime = 0;
   const flightRadius = 8 + Math.random() * 13;
   const flightHeight = 6 + Math.random() * 5;
+  // 翼龙捕鱼状态机：soaring 盘旋 / diving 俯冲扎水 / rising 叼鱼爬升
+  let flyState = 'soaring';
+  let huntCooldown = 2 + Math.random() * 4; // 开局较快就去捕一次鱼，让玩家尽早看到
+  let diveT = 0;
+  let diveDur = 1;
+  let caughtFish = false;
+  let preyFish = null;
+  const diveFrom = new THREE.Vector3();
+  const diveTo = new THREE.Vector3();
+  // 沧龙跃出捕食状态：扑咬正在低空俯冲的翼龙 + 顺便吃鱼
+  let breaching = false;
+  let breachT = 0;
+  let breachDur = 1.3;
+  let breachHeight = 4;
+  let breachCaught = false;
+  let breachPrey = null;
+  let breachCooldown = 5 + Math.random() * 4;
+  let fishEatCooldown = Math.random() * 3;
+  const breachFrom = new THREE.Vector3();
+  const breachApex = new THREE.Vector3();
   let wakeTimer = 0; // 被摸醒后多久内不再入睡
   let sparkleTimer = 1 + Math.random() * 2; // sparkle 变体的金色粒子涓流节拍
   let callTimer = 10 + Math.random() * 15;
@@ -767,26 +807,200 @@ export function createDinosaur(species, saved = null, opts = {}) {
     }
 
     if (wrapper.flying) {
-      flightAngle += dt * config.speed;
-      const x = Math.cos(flightAngle) * flightRadius;
-      const z = Math.sin(flightAngle) * flightRadius;
-      const ground = Math.max(SEA_LEVEL, ctx.terrain.getHeightAt(x, z));
-      group.position.set(x, ground + flightHeight + Math.sin(flightAngle * 2) * 0.7, z);
-      group.rotation.y = flightAngle + Math.PI / 2;
+      const p = group.position;
       const flap = Math.sin(ctx.time * 8) * 0.65;
-      model.wings[0].rotation.x = flap;
-      model.wings[1].rotation.x = flap;
+
+      // ---- 盘旋：偶尔锁定水里的鱼，切入俯冲 ----
+      if (flyState === 'soaring') {
+        wrapper.diving = false;
+        flightAngle += dt * config.speed;
+        const x = Math.cos(flightAngle) * flightRadius;
+        const z = Math.sin(flightAngle) * flightRadius;
+        const ground = Math.max(SEA_LEVEL, ctx.terrain.getHeightAt(x, z));
+        p.set(x, ground + flightHeight + Math.sin(flightAngle * 2) * 0.7, z);
+        group.rotation.set(0, flightAngle + Math.PI / 2, 0);
+        model.wings[0].rotation.x = flap;
+        model.wings[1].rotation.x = flap;
+        huntCooldown -= dt;
+        if (huntCooldown <= 0) {
+          const fish = nearestFishTo(p, ctx.entities, WORLD_SIZE);
+          if (fish) {
+            preyFish = fish;
+            diveFrom.copy(p);
+            diveTo.set(fish.object3d.position.x, SEA_LEVEL + 0.12, fish.object3d.position.z);
+            diveDur = clamp(diveFrom.distanceTo(diveTo) / 16, 0.7, 2.4);
+            diveT = 0;
+            caughtFish = false;
+            flyState = 'diving';
+            wrapper.lifeState = 'fishing';
+          } else {
+            huntCooldown = 3 + Math.random() * 4; // 没鱼可捕：稍后再试
+          }
+        }
+        return;
+      }
+
+      // ---- 俯冲：沿弧线扎向鱼的水面位置（越冲越快），收翅压低机头 ----
+      if (flyState === 'diving') {
+        wrapper.diving = true;
+        diveT = Math.min(1, diveT + dt / diveDur);
+        const alive = preyFish && preyFish.alive && !preyFish.consumed;
+        diveTo.set(
+          alive ? preyFish.object3d.position.x : diveTo.x,
+          SEA_LEVEL + 0.12,
+          alive ? preyFish.object3d.position.z : diveTo.z
+        );
+        p.lerpVectors(diveFrom, diveTo, diveT * diveT); // easeIn
+        group.rotation.y = Math.atan2(diveTo.x - diveFrom.x, diveTo.z - diveFrom.z);
+        group.rotation.x = 0.55 * diveT; // 机头下压
+        group.rotation.z = Math.sin(ctx.time * 6) * 0.05;
+        model.wings[0].rotation.x = -0.6; // 收翅俯冲
+        model.wings[1].rotation.x = -0.6;
+        if (diveT >= 1) {
+          if (alive && preyFish.object3d.position.distanceToSquared(p) < 4) {
+            preyFish.consume(ctx.removeEntity);
+            caughtFish = true;
+            ctx.bus.emit('eat', { species, diet: 'fish' });
+            ctx.audio.playCry(species);
+          }
+          ctx.audio.playSplash();
+          ctx.particles.burst({ x: p.x, y: SEA_LEVEL + 0.1, z: p.z }, {
+            count: 12, colors: ['#bfeaff', '#ffffff', '#9fd8f5'], speed: 2.4, gravity: 9, life: 0.5, size: 0.14,
+          });
+          model.catch.visible = caughtFish;
+          // 上升目标：盘旋角度推进后的高空位置
+          flightAngle += 0.6;
+          const rx = Math.cos(flightAngle) * flightRadius;
+          const rz = Math.sin(flightAngle) * flightRadius;
+          const rground = Math.max(SEA_LEVEL, ctx.terrain.getHeightAt(rx, rz));
+          diveFrom.copy(p);
+          diveTo.set(rx, rground + flightHeight, rz);
+          diveDur = clamp(diveFrom.distanceTo(diveTo) / 14, 0.7, 2.4);
+          diveT = 0;
+          flyState = 'rising';
+        }
+        return;
+      }
+
+      // ---- 爬升：叼着鱼抬头扑翼回到盘旋高度 ----
+      wrapper.diving = false;
+      diveT = Math.min(1, diveT + dt / diveDur);
+      const e = 1 - (1 - diveT) * (1 - diveT); // easeOut
+      p.lerpVectors(diveFrom, diveTo, e);
+      group.rotation.y = Math.atan2(diveTo.x - p.x, diveTo.z - p.z);
+      group.rotation.x = -0.3 * (1 - diveT); // 抬头
+      group.rotation.z = 0;
+      model.wings[0].rotation.x = flap * 1.2; // 用力扑翼
+      model.wings[1].rotation.x = flap * 1.2;
+      if (diveT >= 1) {
+        flyState = 'soaring';
+        huntCooldown = 6 + Math.random() * 6;
+        model.catch.visible = false;
+        caughtFish = false;
+        preyFish = null;
+        group.rotation.x = 0;
+        wrapper.lifeState = 'wandering';
+      }
       return;
     }
 
     if (wrapper.swimming) {
-      // 游泳：朝水中目标巡游，水面下沉浮 + 鳍摆动；被放上岸会贴地滑回最近的水
-      if (Math.hypot(wanderTarget.x - group.position.x, wanderTarget.z - group.position.z) < 1) {
+      const p = group.position;
+
+      // ---- 跃出水面捕食正在低空俯冲的翼龙（翼龙唯一的天敌） ----
+      if (breaching) {
+        breachT = Math.min(1, breachT + dt / breachDur);
+        // 追踪猎物的水平位置（还活着的话）→ 冲着翼龙脚下顶上去
+        if (breachPrey && breachPrey.alive && !breachPrey.consumed) {
+          breachApex.x = breachPrey.object3d.position.x;
+          breachApex.z = breachPrey.object3d.position.z;
+        }
+        const arc = Math.sin(breachT * Math.PI); // 0→1→0 抛物线
+        const hz = Math.min(1, breachT / 0.5); // 上升段冲到猎物正下方
+        p.x = lerp(breachFrom.x, breachApex.x, hz);
+        p.z = lerp(breachFrom.z, breachApex.z, hz);
+        p.y = SEA_LEVEL - 0.2 + arc * breachHeight;
+        group.rotation.y = Math.atan2(breachApex.x - breachFrom.x, breachApex.z - breachFrom.z);
+        group.rotation.x = (breachT - 0.5) * 2.4; // 上升昂首冲天 → 顶点 → 下落扎回水里
+        group.rotation.z = 0;
+        for (let i = 0; i < model.flippers.length; i++) model.flippers[i].rotation.x = 0.4;
+        // 扑咬命中：破水而出后，叼住进入打击范围的任意低空翼龙（不限于触发者）→ poof；爬得够快的逃脱
+        if (!breachCaught && p.y > SEA_LEVEL + 0.6) {
+          for (const e of ctx.entities) {
+            if (!e.flying || !e.alive || e.consumed) continue;
+            const ep = e.object3d.position;
+            if (Math.hypot(ep.x - p.x, ep.z - p.z) < 3.2 && Math.abs(p.y - ep.y) < 2.6) {
+              e.consume(ctx.removeEntity, true); // force：叼住飞行的翼龙
+              breachCaught = true;
+              ctx.audio.playBreach();
+              ctx.particles.burst({ x: p.x, y: SEA_LEVEL + 0.4, z: p.z }, {
+                count: 18, colors: ['#bfeaff', '#ffffff', '#9fd8f5'], speed: 3.2, gravity: 9, life: 0.6, size: 0.16,
+              });
+              break;
+            }
+          }
+        }
+        if (breachT >= 1) {
+          breaching = false;
+          breachPrey = null;
+          ctx.audio.playSplash();
+          ctx.particles.burst({ x: p.x, y: SEA_LEVEL + 0.1, z: p.z }, {
+            count: 12, colors: ['#bfeaff', '#ffffff'], speed: 2, gravity: 9, life: 0.5, size: 0.14,
+          });
+        }
+        return;
+      }
+
+      breachCooldown -= dt;
+      fishEatCooldown -= dt;
+
+      // 触发跃出：附近有低空俯冲的翼龙 + 冷却就绪 → 高概率扑出
+      if (breachCooldown <= 0) {
+        for (const e of ctx.entities) {
+          if (!e.flying || !e.diving || !e.alive || e.consumed) continue;
+          const ep = e.object3d.position;
+          if (ep.y > SEA_LEVEL + 4) continue; // 还不够低
+          if (Math.hypot(ep.x - p.x, ep.z - p.z) > 9) continue; // 太远
+          breachCooldown = 7 + Math.random() * 4;
+          if (Math.random() < 0.75) {
+            breaching = true;
+            breachCaught = false;
+            breachPrey = e;
+            breachFrom.copy(p);
+            breachApex.set(ep.x, 0, ep.z);
+            breachHeight = clamp(ep.y - SEA_LEVEL + 2.5, 4.5, 7); // 高高跃起、清晰破水
+            breachDur = 1.1;
+            breachT = 0;
+            ctx.audio.playSplash();
+          }
+          break;
+        }
+        if (breaching) return;
+      }
+
+      // ---- 顺便吃鱼：冷却就绪时朝最近的鱼游过去，靠近即吞 ----
+      let swimTarget = wanderTarget;
+      if (fishEatCooldown <= 0) {
+        const fish = nearestFishTo(p, ctx.entities, 12);
+        if (fish) {
+          swimTarget = fish.object3d.position;
+          if (fish.object3d.position.distanceToSquared(p) < 3.2) {
+            fish.consume(ctx.removeEntity);
+            fishEatCooldown = 3 + Math.random() * 3;
+            ctx.audio.playEat();
+            ctx.particles.burst({ x: p.x, y: SEA_LEVEL + 0.05, z: p.z }, {
+              count: 8, colors: ['#bfeaff', '#ffffff'], speed: 1.6, gravity: 9, life: 0.4, size: 0.12,
+            });
+          }
+        }
+      }
+
+      // ---- 常规游动：朝水中目标（或锁定的鱼）巡游，水面沉浮 + 鳍摆动 ----
+      if (Math.hypot(wanderTarget.x - p.x, wanderTarget.z - p.z) < 1) {
         wanderTarget = chooseWaterTarget(ctx) || chooseLandTarget(ctx);
       }
-      const p = group.position;
-      const dx = wanderTarget.x - p.x;
-      const dz = wanderTarget.z - p.z;
+      const dx = swimTarget.x - p.x;
+      const dz = swimTarget.z - p.z;
       const distance = Math.hypot(dx, dz);
       if (distance > 0.05) {
         p.x += (dx / distance) * config.speed * dt;
@@ -795,6 +1009,7 @@ export function createDinosaur(species, saved = null, opts = {}) {
       }
       const ground = ctx.terrain.getHeightAt(p.x, p.z);
       p.y = Math.max(ground, SEA_LEVEL - 0.22 + Math.sin(ctx.time * 1.6) * 0.16);
+      group.rotation.x = 0; // 跃出后复位
       for (let i = 0; i < model.flippers.length; i++) {
         model.flippers[i].rotation.x = Math.sin(ctx.time * 3 + i) * 0.45;
       }
@@ -896,8 +1111,10 @@ export function createDinosaur(species, saved = null, opts = {}) {
     return state;
   };
 
-  wrapper.consume = (removeEntity) => {
-    if (!wrapper.alive || wrapper.consumed || wrapper.flying || wrapper.swimming) return false;
+  // force=true：沧龙跃出捕食时可叼住飞行的翼龙（地面猎手仍不吃飞行/游泳龙）
+  wrapper.consume = (removeEntity, force = false) => {
+    if (!wrapper.alive || wrapper.consumed) return false;
+    if (!force && (wrapper.flying || wrapper.swimming)) return false;
     wrapper.consumed = true;
     let elapsed = 0;
     const startScale = visualScale;

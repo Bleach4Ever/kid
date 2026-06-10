@@ -25,8 +25,10 @@ import { Unlocks } from './systems/Unlocks.js';
 import { createTree, createFlower } from './entities/Tree.js';
 import { createDinosaur, SPECIES } from './entities/Dinosaur.js';
 import { createEgg, createNest as createNestEntity, createPoop, createMysteryEgg } from './entities/Ecosystem.js';
+import { createFish } from './entities/Fish.js';
 import { rollVariant, VARIANTS } from './entities/Variants.js';
 import { MysteryEggs } from './systems/MysteryEggs.js';
+import { FishSchool } from './systems/FishSchool.js';
 import { LIMITS, SEA_LEVEL } from './constants.js';
 
 // ---------------- 语言（先于一切 UI） ----------------
@@ -361,6 +363,13 @@ function spawnPoop(dinosaur) {
   addEntity(createPoop(), groundPosition(x, z));
 }
 
+// 环境鱼群：水里自动维持一小群（翼龙俯冲捕食 / 沧龙口粮），被吃后慢慢补充
+const fishSchool = new FishSchool({
+  terrain,
+  countFish: () => counts.fish || 0,
+  spawnFish: ({ x, z }) => addEntity(createFish(), new THREE.Vector3(x, SEA_LEVEL - 0.25, z)),
+});
+
 function clearEntities() {
   for (const entity of [...entities]) destroyEntity(entity);
   pendingRemovals.clear();
@@ -608,11 +617,12 @@ function loop() {
     weather.update(dt);
     worldEvents.update(dt);
     if (gameStarted) mysteryEggs.update(dt); // 开始页期间不投放神秘蛋
+    if (gameStarted) fishSchool.update(dt); // 水里自动维持鱼群
     particles.update(dt);
     for (const e of entities) e.update(dt, ctx);
     flushRemovals();
     quality.noteFrame(dt); // auto 档持续卡顿 → 静默降级
-    stage.updateKeys(dt); // 键盘平移/旋转，须在 render() 里的 controls.update() 之前
+    stage.updateCamera(dt); // 键盘/边缘平移 + 旋转，须在 render() 里的 controls.update() 之前
     stage.render();
   }
   requestAnimationFrame(loop);
@@ -648,6 +658,7 @@ window.__world = {
   profile,
   unlocksSys,
   mysteryEggs,
+  fishSchool,
   variants: { roll: rollVariant, VARIANTS },
   seaLevel: SEA_LEVEL,
   lastPet: 0, // 调试计数：冒烟测试验证“点恐龙=抚摸”

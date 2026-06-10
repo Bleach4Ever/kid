@@ -83,19 +83,27 @@ export class Stage {
 
     window.addEventListener('resize', () => this.resize());
 
-    // ----- 键盘相机控制（桌面纯新增；鼠标/触摸完全不受影响） -----
-    // 方向键 = 平移地图；Q/E = 旋转视角。状态按帧消费、dt 缩放。
+    // ----- 相机平移控制（桌面纯新增；触摸/鼠标旋转/缩放完全不受影响） -----
+    // 传统即时战略玩法：WASD / 方向键 平移；鼠标移到屏幕边缘自动朝该方向移动；Q/E 旋转视角。
+    this.canvas = canvas; // 边缘移动只在 3D 画面上生效，避免误触 UI
     this._keys = {
       ArrowUp: false,
       ArrowDown: false,
       ArrowLeft: false,
       ArrowRight: false,
+      KeyW: false,
+      KeyA: false,
+      KeyS: false,
+      KeyD: false,
       KeyQ: false,
       KeyE: false,
     };
-    this._panBaseSpeed = 28; // 世界单位/秒（在参考距离处）
+    this._panBaseSpeed = 30; // 世界单位/秒（在参考距离处）
     this._panRefDistance = 58; // 初始相机距离的手感基准
     this._rotateSpeed = 1.4; // 弧度/秒
+    this._edgeMargin = 44; // 鼠标距屏幕边缘多少像素内开始自动移动
+    // 鼠标位置 + 是否在画面内（仅鼠标触发边缘移动；触摸不触发）
+    this._pointer = { x: -1, y: -1, isMouse: false, overCanvas: false };
     // 复用临时向量，避免每帧分配（与 Input.js 缓存向量风格一致）
     this._forward = new THREE.Vector3();
     this._right = new THREE.Vector3();
@@ -104,7 +112,17 @@ export class Stage {
 
     window.addEventListener('keydown', (e) => this._onKeyDown(e));
     window.addEventListener('keyup', (e) => this._onKeyUp(e));
-    window.addEventListener('blur', () => this._clearKeys());
+    window.addEventListener('blur', () => { this._clearKeys(); this._pointer.overCanvas = false; });
+    window.addEventListener('pointermove', (e) => this._onPointerMove(e));
+    // 指针离开页面时停止边缘移动，避免在边缘外仍持续滚动
+    document.addEventListener('mouseleave', () => { this._pointer.overCanvas = false; });
+  }
+
+  _onPointerMove(e) {
+    this._pointer.x = e.clientX;
+    this._pointer.y = e.clientY;
+    this._pointer.isMouse = e.pointerType === 'mouse';
+    this._pointer.overCanvas = e.target === this.canvas; // 在 UI 按钮/面板上时不触发边缘移动
   }
 
   _isEditableTarget(el) {
@@ -130,10 +148,10 @@ export class Stage {
     for (const k in this._keys) this._keys[k] = false;
   }
 
-  // 每帧（在 render() 之前调用）：把按下的键转成相机平移/旋转。
+  // 每帧（在 render() 之前调用）：把按键 / 鼠标边缘 转成相机平移/旋转。
   // 平移：同量平移 camera.position 与 controls.target，offset 不变，update() 下不变形；
   // 旋转：走 controls.rotateLeft，天然带阻尼。
-  updateKeys(dt) {
+  updateCamera(dt) {
     if (!this.controls.enabled) return; // 工具拖拽/抚摸期间不抢相机
 
     const k = this._keys;
@@ -143,14 +161,31 @@ export class Stage {
     if (k.KeyQ) this.controls.rotateLeft(rot);
     if (k.KeyE) this.controls.rotateLeft(-rot);
 
-    // ----- 平移（方向键） -----
-    let mf = 0; // forward 分量（上/下）
+    // ----- 平移：WASD / 方向键 + 鼠标边缘自动移动 -----
+    let mf = 0; // forward 分量（前/后）
     let mr = 0; // right 分量（左/右）
-    if (k.ArrowUp) mf += 1;
-    if (k.ArrowDown) mf -= 1;
-    if (k.ArrowRight) mr += 1;
-    if (k.ArrowLeft) mr -= 1;
+    if (k.ArrowUp || k.KeyW) mf += 1;
+    if (k.ArrowDown || k.KeyS) mf -= 1;
+    if (k.ArrowRight || k.KeyD) mr += 1;
+    if (k.ArrowLeft || k.KeyA) mr -= 1;
+
+    // 鼠标移到屏幕边缘 → 朝该方向自动移动（越靠边越快；仅鼠标、仅在 3D 画面上）
+    if (this._pointer.isMouse && this._pointer.overCanvas) {
+      const m = this._edgeMargin;
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const px = this._pointer.x;
+      const py = this._pointer.y;
+      if (px <= m) mr -= (m - px) / m;
+      else if (px >= w - m) mr += (px - (w - m)) / m;
+      if (py <= m) mf += (m - py) / m; // 顶部 → 朝前（北）
+      else if (py >= h - m) mf -= (py - (h - m)) / m; // 底部 → 朝后
+    }
+
     if (mf === 0 && mr === 0) return;
+    // 合速度不超过 1（对角不加速）
+    const mag = Math.hypot(mf, mr);
+    if (mag > 1) { mf /= mag; mr /= mag; }
 
     // 相机前向投影到地面（XZ）
     this._forward.subVectors(this.controls.target, this.camera.position);

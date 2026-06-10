@@ -248,6 +248,29 @@ export class Audio {
     this._tone(180, 0.2, { type: 'sine', peak: 0.14, slideTo: 90 });
   }
 
+  // 沧龙破水而出：带通扫频的“哗啦”白噪 + 低音“咚”
+  playBreach() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this._noiseBuffer();
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(400, t);
+    bp.frequency.exponentialRampToValueAtTime(2600, t + 0.18);
+    bp.Q.value = 0.8;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.24, t + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    src.connect(bp);
+    bp.connect(g);
+    g.connect(this.sfxGain);
+    src.start(t);
+    src.stop(t + 0.5);
+    this._tone(150, 0.26, { type: 'sine', peak: 0.16, slideTo: 70 });
+  }
+
   playDinosaur() {
     if (!this._cryOk()) return;
     this._tone(180, 0.22, { type: 'triangle', peak: 0.13, slideTo: 115 });
