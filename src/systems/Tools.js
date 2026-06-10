@@ -1,18 +1,19 @@
 // 工具定义与当前选中状态
 
-// 可选中的“神力”（底部工具栏）；label 是 i18n key，渲染时用 t() 解析
+// 可选中的“神力”（底部工具栏）；label 是 i18n key，渲染时用 t() 解析；
+// cat = 视觉类别（按钮 data-cat 着色 + 类别间隙）：earth/plant/herb/carn/special
 export const TOOLS = [
-  { id: 'mountain', icon: '⛰️', label: 'tool.mountain', type: 'sculpt', dir: 1 },
-  { id: 'ocean', icon: '🌊', label: 'tool.ocean', type: 'sculpt', dir: -1 },
-  { id: 'tree', icon: '🌳', label: 'tool.tree', type: 'place', kind: 'tree' },
-  { id: 'flower', icon: '🌷', label: 'tool.flower', type: 'place', kind: 'flower' },
-  { id: 'triceratops', icon: './icons/triceratops.svg', label: 'tool.triceratops', type: 'place', kind: 'triceratops' },
-  { id: 'brachiosaurus', icon: './icons/brachiosaurus.svg', label: 'tool.brachiosaurus', type: 'place', kind: 'brachiosaurus' },
-  { id: 'stegosaurus', icon: './icons/stegosaurus.svg', label: 'tool.stegosaurus', type: 'place', kind: 'stegosaurus' },
-  { id: 'trex', icon: './icons/trex.svg', label: 'tool.trex', type: 'place', kind: 'trex' },
-  { id: 'raptor', icon: './icons/raptor.svg', label: 'tool.raptor', type: 'place', kind: 'raptor' },
-  { id: 'oviraptor', icon: './icons/oviraptor.svg', label: 'tool.oviraptor', type: 'place', kind: 'oviraptor' },
-  { id: 'pterosaur', icon: './icons/pterosaur.svg', label: 'tool.pterosaur', type: 'place', kind: 'pterosaur' },
+  { id: 'mountain', icon: '⛰️', label: 'tool.mountain', type: 'sculpt', dir: 1, cat: 'earth' },
+  { id: 'ocean', icon: '🌊', label: 'tool.ocean', type: 'sculpt', dir: -1, cat: 'earth' },
+  { id: 'tree', icon: '🌳', label: 'tool.tree', type: 'place', kind: 'tree', cat: 'plant' },
+  { id: 'flower', icon: '🌷', label: 'tool.flower', type: 'place', kind: 'flower', cat: 'plant' },
+  { id: 'triceratops', icon: './icons/triceratops.svg', label: 'tool.triceratops', type: 'place', kind: 'triceratops', cat: 'herb' },
+  { id: 'brachiosaurus', icon: './icons/brachiosaurus.svg', label: 'tool.brachiosaurus', type: 'place', kind: 'brachiosaurus', cat: 'herb' },
+  { id: 'stegosaurus', icon: './icons/stegosaurus.svg', label: 'tool.stegosaurus', type: 'place', kind: 'stegosaurus', cat: 'herb' },
+  { id: 'trex', icon: './icons/trex.svg', label: 'tool.trex', type: 'place', kind: 'trex', cat: 'carn' },
+  { id: 'raptor', icon: './icons/raptor.svg', label: 'tool.raptor', type: 'place', kind: 'raptor', cat: 'carn' },
+  { id: 'oviraptor', icon: './icons/oviraptor.svg', label: 'tool.oviraptor', type: 'place', kind: 'oviraptor', cat: 'special' },
+  { id: 'pterosaur', icon: './icons/pterosaur.svg', label: 'tool.pterosaur', type: 'place', kind: 'pterosaur', cat: 'special' },
 ];
 
 // 点一下立刻触发的动作（顶部按钮）；✨ 是魔法面板的开关

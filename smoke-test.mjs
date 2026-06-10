@@ -450,6 +450,49 @@ const volcanoState = await page.evaluate(() => {
 await page.waitForTimeout(400);
 const finalTriangles = await page.evaluate(() => window.__world.stage.renderer.info.render.triangles);
 
+// ---------------- 阶段 7：无文字引导 + 按钮类别 ----------------
+// 清 localStorage = 新玩家 → 开始 1s 后 #tutorial 出现，第一步光环在造山按钮
+await page.evaluate(() => localStorage.clear());
+await page.reload({ waitUntil: 'networkidle' });
+await page.locator('#start-btn').click();
+await page.waitForTimeout(1400);
+const tutStart = await page.evaluate(() => ({
+  layerVisible: !!document.getElementById('tutorial'),
+  handShown: !!document.querySelector('#tutorial .tut-hand svg, #tutorial .tut-hand'),
+  closeBtn: !!document.querySelector('#tutorial .tut-close'),
+  mountainGlow: document.querySelector('#toolbar .tool-btn').classList.contains('tut-glow'),
+  dataCats: [...document.querySelectorAll('#toolbar .tool-btn')].map((b) => b.dataset.cat),
+}));
+// 模拟按住拖动造山 → 第一步完成，光环移到种树按钮
+await page.mouse.move(500, 380);
+await page.mouse.down();
+await page.mouse.move(500, 352, { steps: 6 });
+await page.waitForTimeout(250);
+await page.mouse.up();
+await page.waitForTimeout(300);
+const tutStep2 = await page.evaluate(() => {
+  const btns = document.querySelectorAll('#toolbar .tool-btn');
+  return {
+    mountainGlow: btns[0].classList.contains('tut-glow'),
+    treeGlow: btns[2].classList.contains('tut-glow'),
+  };
+});
+// 后两步直接触发 bus 事件 → 引导收尾：层消失 + profile.tutorial.done
+await page.evaluate(() => {
+  window.__world.bus.emit('place', { kind: 'tree' });
+  window.__world.bus.emit('place', { kind: 'trex' });
+});
+await page.waitForTimeout(800);
+const tutDone = await page.evaluate(() => ({
+  layerGone: !document.getElementById('tutorial'),
+  profileDone: JSON.parse(localStorage.getItem('dino-world:profile')).tutorial?.done === true,
+}));
+// reload 后引导不再出现
+await page.reload({ waitUntil: 'networkidle' });
+await page.locator('#start-btn').click();
+await page.waitForTimeout(1500);
+const tutNoRepeat = await page.evaluate(() => !document.getElementById('tutorial'));
+
 await browser.close();
 
 console.log('canvas:', `${Math.round(canvasBox.width)}x${Math.round(canvasBox.height)}`);
@@ -481,6 +524,9 @@ console.log('meteor shower:', meteorState);
 console.log('aurora:', auroraState);
 console.log('volcano:', volcanoState);
 console.log('final triangles:', finalTriangles);
+console.log('tutorial start:', tutStart);
+console.log('tutorial after sculpt:', tutStep2);
+console.log('tutorial done:', tutDone, ' no repeat after reload:', tutNoRepeat);
 console.log('console errors:', consoleErrors.length, consoleErrors.slice(0, 8));
 console.log('page errors:', pageErrors.length, pageErrors.slice(0, 8));
 
@@ -616,6 +662,27 @@ if (volcanoState.camDrift > 0.001) {
 }
 if (finalTriangles < 1000) {
   console.error('\n❌ rendering broken after world events');
+  process.exit(1);
+}
+const EXPECTED_CATS = ['earth', 'earth', 'plant', 'plant', 'herb', 'herb', 'herb', 'carn', 'carn', 'special', 'special'];
+if (JSON.stringify(tutStart.dataCats) !== JSON.stringify(EXPECTED_CATS)) {
+  console.error('\n❌ toolbar data-cat attributes wrong');
+  process.exit(1);
+}
+if (!tutStart.layerVisible || !tutStart.handShown || !tutStart.closeBtn || !tutStart.mountainGlow) {
+  console.error('\n❌ tutorial did not start with halo on the mountain button');
+  process.exit(1);
+}
+if (tutStep2.mountainGlow || !tutStep2.treeGlow) {
+  console.error('\n❌ tutorial did not advance to the tree step after sculpting');
+  process.exit(1);
+}
+if (!tutDone.layerGone || !tutDone.profileDone) {
+  console.error('\n❌ tutorial did not finish / persist tutorial.done');
+  process.exit(1);
+}
+if (!tutNoRepeat) {
+  console.error('\n❌ tutorial reappeared after being completed');
   process.exit(1);
 }
 console.log('\n✅ SMOKE TEST PASSED');

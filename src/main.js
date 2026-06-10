@@ -13,6 +13,7 @@ import { Bus } from './systems/Bus.js';
 import { Particles } from './systems/Particles.js';
 import { Toolbar } from './ui/Toolbar.js';
 import { Pedia } from './ui/Pedia.js';
+import { Tutorial } from './ui/Tutorial.js';
 import { Quests } from './systems/Quests.js';
 import { encodeHeightsI16, decodeHeightsI16 } from './systems/Storage.js';
 import { loadSave, clearSave, serializeWorld, hasSave } from './systems/SaveGame.js';
@@ -339,10 +340,24 @@ function ensureNight() {
 
 const EVENT_IDS = new Set(['flowerRain', 'meteor', 'aurora', 'volcano']);
 
+// 昼夜切换的 0.4s 全屏暖橙/深蓝闪光（纯装饰，pointer-events:none）
+const skyFlash = document.createElement('div');
+skyFlash.id = 'sky-flash';
+document.body.appendChild(skyFlash);
+skyFlash.addEventListener('animationend', () => skyFlash.classList.remove('flash'));
+
+function flashSky(phase) {
+  skyFlash.classList.toggle('cool', phase === 'night');
+  skyFlash.classList.remove('flash');
+  void skyFlash.offsetWidth; // 重启动画
+  skyFlash.classList.add('flash');
+}
+
 function onAction(id) {
   if (id === 'daynight') {
     sky.cycle();
     syncSkyPhase();
+    flashSky(ctx.skyPhase);
     audio.playWhoosh();
   } else if (id === 'rain') {
     weather.toggleRain(audio);
@@ -368,6 +383,7 @@ function resetWorld() {
 const toolbar = new Toolbar({ tools, audio, onAction, onReset: resetWorld });
 const pedia = new Pedia({ bus, audio, toolbar });
 const quests = new Quests({ bus, audio });
+const tutorial = new Tutorial({ bus, audio, particles, toolbar });
 bus.on('unlock', () => toolbar.refreshMagic()); // 星星里程碑解锁 → 魔法面板即时刷新
 
 // ---------------- 开始（解锁声音） ----------------
@@ -397,6 +413,7 @@ document.getElementById('start-btn').addEventListener('click', () => {
   saveWorld();
   audio.unlock();
   splash.classList.add('hidden');
+  tutorial.maybeStart();
 });
 
 // 有存档 → 显示「继续上次的世界」
@@ -408,6 +425,7 @@ continueBtn.addEventListener('click', () => {
   gameStarted = true;
   audio.unlock();
   splash.classList.add('hidden');
+  tutorial.maybeStart();
 });
 
 // ---------------- 主循环 ----------------
@@ -462,6 +480,7 @@ window.__world = {
   bus,
   pedia,
   quests,
+  tutorial,
   sky,
   weather,
   worldEvents,

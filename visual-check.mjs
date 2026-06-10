@@ -5,7 +5,15 @@ const browser = await chromium.launch({
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'],
 });
 const page = await browser.newPage({ viewport: { width: 1100, height: 760 } });
+// 预标记引导已完成：截图看的是重塑后的 UI，不要小手挡在中间
+await page.addInitScript(() => {
+  if (!localStorage.getItem('dino-world:profile')) {
+    localStorage.setItem('dino-world:profile', JSON.stringify({ tutorial: { done: true } }));
+  }
+});
 await page.goto(URL, { waitUntil: 'networkidle' });
+await page.waitForTimeout(600);
+await page.screenshot({ path: 'preview-splash.png' });
 await page.locator('#start-btn').click();
 await page.waitForTimeout(300);
 
@@ -42,4 +50,4 @@ for (const [kind, x, y] of [
 await page.waitForTimeout(1200);
 await page.screenshot({ path: 'preview-day.png' });
 await browser.close();
-console.log('saved preview-day.png');
+console.log('saved preview-splash.png + preview-day.png');

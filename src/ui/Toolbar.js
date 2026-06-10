@@ -41,6 +41,7 @@ export class Toolbar {
     const bottom = document.getElementById('toolbar');
     for (const t of TOOLS) {
       const b = makeBtn(t.icon, t.label, false);
+      if (t.cat) b.dataset.cat = t.cat; // CSS 按类别着色 + 类别间隙
       b.addEventListener('click', () => {
         audio.click();
         tools.select(t.id);
