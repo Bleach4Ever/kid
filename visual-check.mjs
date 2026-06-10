@@ -17,11 +17,14 @@ await page.screenshot({ path: 'preview-splash.png' });
 await page.locator('#start-btn').click();
 await page.waitForTimeout(300);
 
-const tools = [
-  'mountain', 'ocean', 'tree', 'flower', 'triceratops',
-  'brachiosaurus', 'stegosaurus', 'trex', 'raptor', 'oviraptor', 'pterosaur',
-];
-const tool = (id) => page.locator('#toolbar .tool-btn').nth(tools.indexOf(id)).click({ force: true });
+const BASE = new Set(['mountain', 'ocean', 'tree', 'flower']);
+// 基础工具直接点；恐龙先开 🦕 抽屉再点（选中后抽屉自动收起）
+const tool = async (id) => {
+  if (BASE.has(id)) return page.locator(`#toolbar .tool-btn[data-tool="${id}"]`).click({ force: true });
+  await page.locator('#toolbar .tool-btn[data-tool="dinos"]').click({ force: true });
+  await page.waitForTimeout(250);
+  await page.locator(`#dino-bar .tool-btn[data-tool="${id}"]`).click({ force: true });
+};
 
 // 堆一座山
 await tool('mountain');

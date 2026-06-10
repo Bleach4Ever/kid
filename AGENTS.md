@@ -6,9 +6,9 @@ This repository is a browser-based Three.js game built with Vite. Application co
 
 - `main.js` assembles the world, owns the single animation loop, registers error boundaries, and exposes the `window.__world` test handle.
 - `world/` contains scene, terrain, water, and sky rendering, including WebGL context-loss recovery.
-- `entities/` defines edible plants, seven dinosaur species, nests, eggs, and poop — all models are procedural.
-- `systems/` handles input, tools, weather, manual world events (volcano, meteors, aurora), synthesized audio, particles, quests, quality tiers, save games, player profile, and the `Bus` event bus.
-- `ui/` contains the toolbar, dino pedia (sticker book), settings panel, wordless tutorial, and toasts; `style.css` contains all interface styling.
+- `entities/` defines edible plants, fifteen dinosaur species (with rarity tiers and a swimming mosasaurus), color variants (`Variants.js`), nests, eggs, mystery eggs, and poop — all models are procedural.
+- `systems/` handles input, tools, weather, manual world events (volcano, meteors, aurora), synthesized audio, particles, quests, species unlock milestones (`Unlocks.js`), mystery-egg scheduling with a pity guarantee (`MysteryEggs.js`), quality tiers, save games, player profile, and the `Bus` event bus.
+- `ui/` contains the toolbar with its dino drawer, dino pedia (sticker book with rarity borders and collection meters), settings panel, wordless tutorial, and toasts; `style.css` contains all interface styling.
 - `i18n.js` provides bilingual (zh/en) strings; `initLang()` runs before any UI is built.
 - `constants.js` and `utils.js` hold shared configuration and helpers.
 

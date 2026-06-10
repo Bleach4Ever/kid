@@ -32,8 +32,8 @@ URL=http://host:port node smoke-test.mjs   # 测其他服务器
 `src/main.js` 是装配中心：创建所有系统、拥有唯一的 `requestAnimationFrame` 主循环，并暴露 `window.__world` 测试句柄。模块间遵循功能边界，不要把逻辑堆进 main.js。
 
 - `world/` — Scene（渲染器/相机/灯光/上下文丢失处理）、Terrain（高度网格 + 造山挖海笔刷 + 场景预设）、Water、Sky（昼夜过渡）。
-- `entities/` — 程序化模型：Tree（树/花）、Dinosaur（七种恐龙 + 漫游/进食/产蛋/成长 AI）、Ecosystem（巢穴/蛋/孵化/粪便）。
-- `systems/` — Tools/Input（指针→射线→工具）、Weather、WorldEvents（火山/流星雨等手动事件）、Audio（Web Audio 合成）、Particles、Quests、Quality、SaveGame/Storage、Profile、Bus。
+- `entities/` — 程序化模型：Tree（树/花）、Dinosaur（15 种恐龙 + 稀有度 + 漫游/飞行/游泳/进食/产蛋/成长 AI）、Variants（闪光变体配色与概率）、Ecosystem（巢穴/蛋/神秘蛋/孵化/粪便）。
+- `systems/` — Tools/Input（指针→射线→工具）、Unlocks（物种解锁里程碑）、MysteryEggs（神秘蛋调度+保底抽取）、Weather、WorldEvents（火山/流星雨等手动事件）、Audio（Web Audio 合成）、Particles、Quests、Quality、SaveGame/Storage、Profile、Bus。
 - `ui/` — Toolbar、Pedia（图鉴）、Settings、Tutorial（无字教程）、Toast。
 
 ### 关键耦合机制
