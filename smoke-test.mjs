@@ -571,6 +571,18 @@ const capTest = await page.evaluate(() => {
   };
 });
 
+// 超上限存档恢复：旧档恐龙数 > 当前 dinoCap → 只恢复前 N 只
+const capRestore = await page.evaluate(() => {
+  const w = window.__world;
+  const cap = w.quality.dinoCap;
+  const recs = [];
+  for (let i = 0; i < cap + 10; i++) {
+    recs.push({ k: 'dino', s: 'triceratops', x: (i % 12) * 2 - 11, z: Math.floor(i / 12) * 2 - 11 });
+  }
+  w.restoreWorld({ preset: 'park', skyIndex: 0, entities: recs });
+  return { cap, alive: w.entities.filter((e) => e.isDinosaur && e.alive).length };
+});
+
 // ---------------- 阶段 9：健壮性 + PWA（刻意制造错误的段落必须放在最后） ----------------
 // 此前的完整流程必须零报错；从这里开始的错误是测试自己制造的
 const cleanConsoleErrors = consoleErrors.length;
@@ -592,7 +604,7 @@ const pwaState = await page.evaluate(async () => {
   try {
     const link = document.querySelector('link[rel="manifest"]');
     const m = await (await fetch(link.href)).json();
-    res.manifestOk = m.short_name === '恐龙岛' && m.display === 'fullscreen' && m.icons.length === 3;
+    res.manifestOk = m.short_name === '恐龙岛 Dino' && m.display === 'fullscreen' && m.icons.length === 3;
   } catch { /* res.manifestOk 保持 false */ }
   try {
     for (let i = 0; i < 20 && !res.swRegistered; i++) {
@@ -675,6 +687,7 @@ console.log('volume sliders -> 0:', volumeState);
 console.log('quality low:', lowQuality);
 console.log('tree shared geometry:', treeShared, ' draw calls:', callsBefore, '->', callsAfter);
 console.log('dino cap stress:', capTest);
+console.log('cap-aware restore:', capRestore);
 console.log('start button boundary:', startBtnBoundary);
 console.log('pwa:', pwaState);
 console.log('context loss:', { ctxExtOk, ...ctxLostState }, '-> restore:', ctxRestoredState);
@@ -893,6 +906,10 @@ if (
   !capTest.entitiesUnchanged || !capTest.shake || !capTest.statusText.includes('60 / 60')
 ) {
   console.error('\n❌ dino hard cap did not reject placement at the limit');
+  process.exit(1);
+}
+if (capRestore.alive > capRestore.cap) {
+  console.error('\n❌ restoreWorld exceeded the dino hard cap', capRestore);
   process.exit(1);
 }
 console.log('\n✅ SMOKE TEST PASSED');

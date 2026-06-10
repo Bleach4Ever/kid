@@ -10,8 +10,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectRegister: false, // main.js 里手动注册并 try/catch（itch.io 沙盒 iframe 会抛错）
       manifest: {
-        name: '我的小世界 — 恐龙岛',
-        short_name: '恐龙岛',
+        name: '我的小世界 · My Little World',
+        short_name: '恐龙岛 Dino',
         description: '给小朋友玩的低多边形恐龙沙盒',
         lang: 'zh-CN',
         start_url: './',

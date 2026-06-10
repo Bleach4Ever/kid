@@ -1245,16 +1245,16 @@ body {
   position: absolute;
   right: 10px;
   top: 50%;
-  width: 38px;
-  height: 38px;
-  margin-top: -19px;
+  width: 44px; /* ≥44px 触摸热区（WCAG），字号保持小巧 */
+  height: 44px;
+  margin-top: -22px;
   pointer-events: auto;
   border: 2px solid #fff;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.6);
   box-shadow: 0 3px 10px var(--shadow);
   color: var(--ink);
-  font-size: 17px;
+  font-size: 16px;
   font-family: inherit;
   opacity: 0.7;
   cursor: pointer;

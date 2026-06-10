@@ -343,7 +343,7 @@ export class Audio {
     g.gain.linearRampToValueAtTime(0.12, this.ctx.currentTime + 0.4);
     src.connect(lp);
     lp.connect(g);
-    g.connect(this.master);
+    g.connect(this.sfxGain);
     src.start();
     this.rainNode = { src, g };
   }
@@ -437,7 +437,7 @@ export class Audio {
     g.gain.linearRampToValueAtTime(0.18, this.ctx.currentTime + 0.8);
     src.connect(lp);
     lp.connect(g);
-    g.connect(this.master);
+    g.connect(this.sfxGain);
     src.start();
     this.rumbleNode = { src, g };
   }

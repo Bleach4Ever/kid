@@ -525,6 +525,8 @@ export function createDinosaur(species, saved = null) {
       ctx.skyPhase === 'night' && !wrapper.target && wrapper.eggTimer > 5 && wakeTimer === 0
     ) {
       wrapper.lifeState = 'sleeping';
+      nodTime = 0; // 入睡打断点头：复位角度，避免歪着头睡一整晚
+      group.rotation.x = 0;
     }
     if (wrapper.lifeState === 'sleeping') {
       alertMarker.visible = false;

@@ -57,7 +57,14 @@ function showFatalError() {
   document.getElementById('error-overlay').classList.add('visible');
 }
 window.addEventListener('error', showFatalError);
-window.addEventListener('unhandledrejection', showFatalError);
+// 被拒绝的 Promise 大多无害（如 iOS 上 AudioContext.resume()）：抢救存档 + 记日志，但不吓孩子
+window.addEventListener('unhandledrejection', (e) => {
+  e.preventDefault();
+  try {
+    saveWorld();
+  } catch { /* 存档失败也不升级为致命提示 */ }
+  console.warn('Unhandled promise rejection:', e.reason);
+});
 
 // ---------------- 装配世界 ----------------
 const canvas = document.getElementById('scene');
@@ -350,12 +357,16 @@ function restoreWorld(save) {
   if (save.heights) terrain.applyHeights(save.heights);
   sky.setIndex(save.skyIndex);
   syncSkyPhase();
+  let restoredDinos = aliveDinoCount(); // clearEntities 后应为 0，仍以实际计数为准
   for (const rec of save.entities) {
     if (rec.k === 'tree' || rec.k === 'flower') {
       placePresetEntity(rec.k, rec.x, rec.z);
     } else if (rec.k === 'nest' && SPECIES[rec.s]) {
       createNest(rec.s, { x: rec.x, z: rec.z });
     } else if (rec.k === 'dino' && SPECIES[rec.s]) {
+      // 旧档可能超过当前档位的硬上限（如换到 low 档）：只恢复前 N 只
+      if (restoredDinos >= quality.dinoCap) continue;
+      restoredDinos++;
       addEntity(createDinosaur(rec.s, rec), groundPosition(rec.x, rec.z));
     }
   }
