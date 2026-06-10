@@ -44,7 +44,9 @@ export function clearSave() {
   storage.remove(KEY);
 }
 
-// snapshot: { preset, skyIndex, heights: Float32Array, entities: [...] }
+// snapshot: { preset, skyIndex, timeOfDay, heights: Float32Array, entities: [...] }
+// timeOfDay 为附加字段（连续小时）：读旧档无此字段时由 main 按 skyIndex 映射。
+// VERSION 已因地图放大升到 2，v1 旧档统一失效回到初始预设。
 export function serializeWorld(snapshot) {
   try {
     const save = {
@@ -52,6 +54,7 @@ export function serializeWorld(snapshot) {
       savedAt: Date.now(),
       preset: snapshot.preset,
       skyIndex: snapshot.skyIndex,
+      timeOfDay: snapshot.timeOfDay,
       terrain: {
         seg: TERRAIN_SEGMENTS,
         enc: ENCODING,

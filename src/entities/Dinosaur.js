@@ -429,7 +429,7 @@ function nearestFishTo(pos, entities, maxDist) {
   let best = null;
   let bestDistance = maxDist * maxDist;
   for (const entity of entities) {
-    if (!entity.isFish || !entity.alive || entity.consumed) continue;
+    if (entity.kind !== 'fish' || !entity.alive || entity.consumed) continue; // 主干海洋生物的鱼群
     const distance = pos.distanceToSquared(entity.object3d.position);
     if (distance < bestDistance) {
       best = entity;

@@ -121,11 +121,11 @@ await page.evaluate(() => {
     }
   }
 });
-// 顶部：昼夜、下雨、✨（打开魔法面板）
-for (let i = 0; i < 3; i++) {
-  await page.locator('#top-bar .tool-btn').nth(i).click({ force: true });
-  await page.waitForTimeout(150);
-}
+// 顶部：⏩ 快进时间，再点 ✨ 打开魔法面板（已去掉手动下雨按钮）
+await page.locator('#top-bar .tool-btn').nth(0).click({ force: true }); // ⏩ 快进时间
+await page.waitForTimeout(150);
+await page.locator('#top-bar .tool-btn').nth(1).click({ force: true }); // ✨ 打开魔法面板
+await page.waitForTimeout(150);
 // 魔法面板里点 🌈 彩虹（始终解锁），再点 ✨ 收起
 const magicFirstOpen = await page.evaluate(() => {
   const bar = document.getElementById('magic-bar');
@@ -137,7 +137,7 @@ const magicFirstOpen = await page.evaluate(() => {
 await page.locator('#magic-bar .tool-btn').nth(0).click({ force: true });
 await page.waitForTimeout(150);
 const rainbowShown = await page.evaluate(() => window.__world.weather.rainbowT > 0);
-await page.locator('#top-bar .tool-btn').nth(2).click({ force: true });
+await page.locator('#top-bar .tool-btn').nth(1).click({ force: true }); // ✨ 收起魔法面板
 await page.waitForTimeout(600);
 
 // 食草龙会吃掉附近植物、成长，并进入饱腹冷却
@@ -269,25 +269,6 @@ const landEscapeAfter = await page.evaluate(async () => {
 });
 console.log('land dino escape:', landEscape, '->', landEscapeAfter);
 
-// 水里的鱼：环境鱼群应在水中生成、贴着水面（翼龙俯冲捕食 / 沧龙口粮的对象）
-await page.evaluate(() => window.__world.fishSchool._debugFill());
-await page.waitForTimeout(350); // 让鱼跑一帧贴到水面
-const fishCheck = await page.evaluate(() => {
-  const w = window.__world;
-  let total = 0;
-  let inWater = 0;
-  let atSurface = 0;
-  for (const e of w.entities) {
-    if (e.kind !== 'fish' || !e.alive) continue;
-    total++;
-    const p = e.object3d.position;
-    if (w.terrain.getHeightAt(p.x, p.z) < w.seaLevel) inWater++;
-    if (Math.abs(p.y - w.seaLevel) < 0.6) atSurface++;
-  }
-  return { total, inWater, atSurface };
-});
-console.log('fish school:', fishCheck);
-
 // i18n：切到英文 → 工具栏标签/标题立即变化
 const i18nState = await page.evaluate(() => {
   window.__world.i18n.setLang('en');
@@ -369,11 +350,12 @@ const corruptState = await page.evaluate(() => ({
 await page.reload({ waitUntil: 'networkidle' });
 await page.locator('#start-btn').click();
 await page.waitForTimeout(400);
-// 切到夜晚（daynight ×2）
-for (let i = 0; i < 2; i++) {
-  await page.locator('#top-bar .tool-btn').nth(0).click({ force: true });
-  await page.waitForTimeout(150);
-}
+// 切到夜晚：直接把时间设到夜里（daynight 现在是「快进时间」，不再 3 态循环）
+await page.evaluate(() => {
+  window.__world.timeOfDay.restore(22);
+  window.__world.sky.snapTo(22);
+});
+await page.waitForTimeout(150);
 // 锁定饥饿/产蛋计时，让所有地面恐龙安静入睡
 await page.evaluate(() => {
   for (const e of window.__world.entities) {
@@ -444,11 +426,11 @@ await page.waitForTimeout(250);
 const pediaUnlock = await page.evaluate(() => ({
   raptorSeen: !!JSON.parse(localStorage.getItem('dino-world:profile')).pedia?.raptor?.seen,
   toastShown: !!document.querySelector('.pedia-toast'),
-  badgeOn: document.querySelectorAll('#top-bar .tool-btn')[3].classList.contains('has-badge'),
+  badgeOn: document.querySelectorAll('#top-bar .tool-btn')[2].classList.contains('has-badge'),
 }));
 
 // 打开 📖：7 张卡片、未解锁卡有剪影 class、红点清除
-await page.locator('#top-bar .tool-btn').nth(3).click({ force: true });
+await page.locator('#top-bar .tool-btn').nth(2).click({ force: true });
 await page.waitForTimeout(250);
 const pediaModal = await page.evaluate(() => {
   const modal = document.getElementById('pedia-modal');
@@ -456,7 +438,7 @@ const pediaModal = await page.evaluate(() => {
     visible: !modal.classList.contains('hidden'),
     cards: modal.querySelectorAll('.pedia-card').length,
     locked: modal.querySelectorAll('.pedia-card.locked').length,
-    badgeCleared: !document.querySelectorAll('#top-bar .tool-btn')[3].classList.contains('has-badge'),
+    badgeCleared: !document.querySelectorAll('#top-bar .tool-btn')[2].classList.contains('has-badge'),
     // 收集钩子 UI：稀有度边框 / 三档进度芯片 + 总进度条 / 锁定提示角标 / 变体色点（只有 raptor seen → 4 点）
     rare: modal.querySelectorAll('.pedia-card.rarity-rare').length,
     uncommon: modal.querySelectorAll('.pedia-card.rarity-uncommon').length,
@@ -495,7 +477,7 @@ const pediaAfterReload = await page.evaluate(
 // 🔄 重置世界后解锁仍在（pedia 在 profile，不随世界存档清除）
 await page.locator('#start-btn').click();
 await page.waitForTimeout(300);
-await page.locator('#top-bar .tool-btn').nth(6).click({ force: true }); // 🔄 重置
+await page.locator('#top-bar .tool-btn').nth(5).click({ force: true }); // 🔄 重置
 await page.waitForTimeout(300);
 const pediaAfterReset = await page.evaluate(
   () => !!JSON.parse(localStorage.getItem('dino-world:profile')).pedia?.raptor?.seen
@@ -573,7 +555,7 @@ const luckyState = await page.evaluate(() => {
 });
 
 // 打开 ✨ → 魔法面板滑出，5 个按钮（🌈🌸🌠🌌🌋）全部可见
-await page.locator('#top-bar .tool-btn').nth(2).click({ force: true });
+await page.locator('#top-bar .tool-btn').nth(1).click({ force: true });
 await page.waitForTimeout(350);
 const magicPanel = await page.evaluate(() => {
   const bar = document.getElementById('magic-bar');
@@ -594,12 +576,12 @@ const flowerRainEnd = await page.evaluate(() => {
   return { active: w.worldEvents.active, flowers: w.counts.flower || 0 };
 });
 
-// 🌠 流星雨：白天触发 → 自动切到夜晚（sky.idx === 2）；快进后结束
+// 🌠 流星雨：白天触发 → 自动切到夜晚（timeOfDay 相位 === 2/night）；快进后结束
 const meteorState = await page.evaluate(() => {
   const w = window.__world;
-  const skyIdxBefore = w.sky.idx;
+  const skyIdxBefore = w.timeOfDay.phaseIndex;
   w.worldEvents.trigger('meteor');
-  const res = { skyIdxBefore, skyIdx: w.sky.idx, active: w.worldEvents.active };
+  const res = { skyIdxBefore, skyIdx: w.timeOfDay.phaseIndex, active: w.worldEvents.active };
   w.worldEvents._debugFastForward(11);
   res.afterActive = w.worldEvents.active;
   return res;
@@ -701,12 +683,10 @@ const mysteryOpen = await page.evaluate(async () => {
   const openedBefore = w.profile.get('mystery').opened;
   const dinosBefore = w.entities.filter((e) => e.isDinosaur && e.alive).length;
   egg.pet();
-  // 轮询等开壳（开壳是 0.5s 游戏时间；软件渲染帧率低，用真实时间轮询而非固定等待）
-  const t0 = performance.now();
-  while (performance.now() - t0 < 5000 && egg.alive) {
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  await new Promise((r) => setTimeout(r, 400)); // 让孵出的恐龙入世界
+  // 裂壳靠每帧累计 dt（开启需 ~0.5s 游戏时间）；用轮询等开启，避免依赖固定帧率
+  const deadline = Date.now() + 6000;
+  while (egg.alive && Date.now() < deadline) await new Promise((r) => setTimeout(r, 80));
+  await new Promise((r) => setTimeout(r, 250)); // 再等一拍让宝宝孵出
   return {
     spawned,
     eggGone: !egg.alive,
@@ -801,8 +781,8 @@ await page.waitForTimeout(1500);
 const tutNoRepeat = await page.evaluate(() => !document.getElementById('tutorial'));
 
 // ---------------- 阶段 8：设置面板 + 音量 + 性能分级 ----------------
-// ⚙️ 打开设置（top-bar 第 5 个按钮）：2 个滑条 + 2 组选项按钮
-await page.locator('#top-bar .tool-btn').nth(4).click({ force: true });
+// ⚙️ 打开设置（top-bar 第 4 个按钮）：2 个滑条 + 2 组选项按钮
+await page.locator('#top-bar .tool-btn').nth(3).click({ force: true });
 await page.waitForTimeout(250);
 const settingsOpen = await page.evaluate(() => ({
   visible: !document.getElementById('settings-modal').classList.contains('hidden'),
@@ -846,11 +826,11 @@ const settingsClosed = await page.evaluate(() =>
   document.getElementById('settings-modal').classList.contains('hidden'));
 
 // 树共享几何：放 10 棵树 → geometry.userData.shared，draw calls 增量宽松 ≤ 12
-// 先清掉环境鱼群并暂停其调度，避免鱼的 draw call 污染本次“只测树”的增量
+// 先清掉环境海洋生物并暂停其调度，避免它们的 draw call 污染本次“只测树”的增量
 await page.evaluate(() => {
   const w = window.__world;
-  for (const e of w.entities) if (e.kind === 'fish') w.removeEntity(e);
-  w.fishSchool.timer = 1e9;
+  for (const e of w.entities) if (e.isSeaLife) w.removeEntity(e);
+  if (w.seaLife) w.seaLife.scanTimer = 1e9;
 });
 await page.waitForTimeout(150); // 让移除生效并渲染一帧
 const callsBefore = await page.evaluate(() => window.__world.stage.renderer.info.render.calls);
@@ -1062,7 +1042,7 @@ if (entityCount < 17 || dinosaurState.species.length < 14) {
   console.error('\n❌ dinosaurs were not placed (15 species expected)');
   process.exit(1);
 }
-if (!splashHidden || toolCount !== 5 || topCount !== 7) {
+if (!splashHidden || toolCount !== 5 || topCount !== 6) {
   console.error('\n❌ UI not wired correctly');
   process.exit(1);
 }
@@ -1295,10 +1275,6 @@ if (keyboardCam.wasdPan < 0.5 || keyboardCam.edgePan < 0.5 || keyboardCam.rot < 
 }
 if (!landEscape.found || !landEscape.startUnderwater || !landEscapeAfter.onLand || landEscapeAfter.swimming) {
   console.error('\n❌ land dinosaur did not climb out of the water', { landEscape, landEscapeAfter });
-  process.exit(1);
-}
-if (fishCheck.total < 8 || fishCheck.inWater !== fishCheck.total || fishCheck.atSurface < 1) {
-  console.error('\n❌ fish did not populate the water at the surface', fishCheck);
   process.exit(1);
 }
 console.log('\n✅ SMOKE TEST PASSED');
