@@ -252,6 +252,32 @@ body {
   color: var(--ink);
 }
 
+#continue-btn {
+  display: block;
+  width: 100%;
+  margin: 0 0 14px;
+  font-family: inherit;
+  font-size: 21px;
+  font-weight: 800;
+  color: #fff;
+  border: none;
+  border-radius: 24px;
+  padding: 13px 24px;
+  background: linear-gradient(#8ade8f, #45b465);
+  box-shadow: 0 6px 0 #2f8d4c, 0 8px 16px var(--shadow);
+  cursor: pointer;
+  letter-spacing: 1px;
+}
+
+#continue-btn:active {
+  transform: translateY(3px);
+  box-shadow: 0 3px 0 #2f8d4c;
+}
+
+#continue-btn.hidden {
+  display: none;
+}
+
 .preset-list {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

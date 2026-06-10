@@ -10,9 +10,10 @@ import { Weather } from './systems/Weather.js';
 import { Audio } from './systems/Audio.js';
 import { Toolbar } from './ui/Toolbar.js';
 import { encodeHeightsI16, decodeHeightsI16 } from './systems/Storage.js';
+import { loadSave, clearSave, serializeWorld, hasSave } from './systems/SaveGame.js';
 import { initLang, t, setLang, getLang, onLangChange, applyDom } from './i18n.js';
 import { createTree, createFlower } from './entities/Tree.js';
-import { createDinosaur } from './entities/Dinosaur.js';
+import { createDinosaur, SPECIES } from './entities/Dinosaur.js';
 import { createEgg, createNest as createNestEntity, createPoop } from './entities/Ecosystem.js';
 import { LIMITS, SEA_LEVEL } from './constants.js';
 
@@ -208,6 +209,61 @@ function applyWorldPreset(preset) {
   }
 }
 
+// ---------------- 存档（continue 上次的世界） ----------------
+let gameStarted = false;
+
+function snapshotWorld() {
+  const r = (v) => Math.round(v * 100) / 100;
+  const saved = [];
+  for (const e of entities) {
+    if (!e.alive || e.consumed) continue;
+    const { x, z } = e.object3d.position;
+    if (e.kind === 'tree' || e.kind === 'flower') {
+      saved.push({ k: e.kind, x: r(x), z: r(z) });
+    } else if (e.isNest) {
+      saved.push({ k: 'nest', s: e.species, x: r(x), z: r(z) });
+    } else if (e.isDinosaur && e.getSaveState) {
+      saved.push(e.getSaveState());
+    }
+    // 刻意不存：蛋（20-30s 即孵化）和粑粑
+  }
+  return {
+    preset: currentPreset,
+    skyIndex: sky.idx,
+    heights: terrain.exportHeights(),
+    entities: saved,
+  };
+}
+
+function saveWorld() {
+  if (!gameStarted) return; // 还在开始页：不能覆盖旧档
+  serializeWorld(snapshotWorld());
+}
+
+function restoreWorld(save) {
+  currentPreset = PRESET_ENTITIES[save.preset] ? save.preset : 'park';
+  clearEntities();
+  terrain.generate(currentPreset); // 兜底：高度数据异常时仍是完整预设地形
+  if (save.heights) terrain.applyHeights(save.heights);
+  sky.setIndex(save.skyIndex);
+  for (const rec of save.entities) {
+    if (rec.k === 'tree' || rec.k === 'flower') {
+      placePresetEntity(rec.k, rec.x, rec.z);
+    } else if (rec.k === 'nest' && SPECIES[rec.s]) {
+      createNest(rec.s, { x: rec.x, z: rec.z });
+    } else if (rec.k === 'dino' && SPECIES[rec.s]) {
+      addEntity(createDinosaur(rec.s, rec), groundPosition(rec.x, rec.z));
+    }
+  }
+}
+
+// 自动保存：定时 + 切后台 + 关页（pagehide 兼容 iOS Safari，两个都注册）
+setInterval(saveWorld, 20000);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') saveWorld();
+});
+window.addEventListener('pagehide', saveWorld);
+
 const actions = {
   sculpt: (point, dir) => {
     terrain.sculpt(point, dir);
@@ -243,6 +299,7 @@ function resetWorld() {
   applyWorldPreset(currentPreset);
   weather.reset(audio);
   sky.reset();
+  saveWorld(); // 重置完成立即覆盖存档
 }
 
 new Toolbar({ tools, audio, onAction, onReset: resetWorld });
@@ -268,7 +325,21 @@ onLangChange(() => {
 });
 
 document.getElementById('start-btn').addEventListener('click', () => {
+  clearSave(); // 选预设新开 = 放弃旧档
   applyWorldPreset(currentPreset);
+  gameStarted = true;
+  saveWorld();
+  audio.unlock();
+  splash.classList.add('hidden');
+});
+
+// 有存档 → 显示「继续上次的世界」
+const continueBtn = document.getElementById('continue-btn');
+if (hasSave()) continueBtn.classList.remove('hidden');
+continueBtn.addEventListener('click', () => {
+  const save = loadSave();
+  if (save) restoreWorld(save);
+  gameStarted = true;
   audio.unlock();
   splash.classList.add('hidden');
 });
@@ -314,4 +385,7 @@ window.__world = {
   hatchEgg,
   i18n: { t, setLang, getLang },
   codec: { encodeHeightsI16, decodeHeightsI16 },
+  saveWorld,
+  restoreWorld,
+  hasSave,
 };

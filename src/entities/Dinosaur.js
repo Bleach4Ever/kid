@@ -251,7 +251,7 @@ function nearestNest(self, entities) {
   return best;
 }
 
-export function createDinosaur(species) {
+export function createDinosaur(species, saved = null) {
   const config = SPECIES[species] || SPECIES.triceratops;
   const model = buildModel(species, config);
   const group = model.group;
@@ -266,17 +266,21 @@ export function createDinosaur(species) {
     alive: true,
     consumed: false,
     size: config.baseSize * 0.65,
-    hungerTimer: config.diet === 'none' ? Infinity : 3 + Math.random() * 5,
+    hungerTimer: config.diet === 'none'
+      ? Infinity
+      : Number.isFinite(saved?.hunger) ? saved.hunger : 3 + Math.random() * 5,
     target: null,
-    eggTimer: 35 + Math.random() * 25,
+    // 必须恢复 eggTimer，否则读档后全体恐龙同时产蛋
+    eggTimer: Number.isFinite(saved?.egg) ? saved.egg : 35 + Math.random() * 25,
     mealsEaten: 0,
     lifeState: 'wandering',
     nestTarget: null,
   };
 
-  let age = 0;
-  let foodGrowth = 0;
-  let visualScale = 0.001;
+  let age = Number.isFinite(saved?.age) ? saved.age : 0;
+  let foodGrowth = Number.isFinite(saved?.fg) ? saved.fg : 0;
+  // 读档恢复的成年恐龙直接以接近全尺寸出现，不从零长大
+  let visualScale = saved ? config.baseSize * growthFactor() * 0.9 : 0.001;
   let wanderTarget = diskTarget();
   let retargetTimer = 0;
   let walkTime = Math.random() * TAU;
@@ -451,6 +455,22 @@ export function createDinosaur(species) {
       wanderTarget = chooseLandTarget(ctx.terrain);
     }
     moveToward(wanderTarget, dt, ctx.terrain);
+  };
+
+  wrapper.getSaveState = () => {
+    const r = (v) => Math.round(v * 100) / 100;
+    const state = {
+      k: 'dino',
+      s: species,
+      x: r(group.position.x),
+      z: r(group.position.z),
+      age: r(age),
+      fg: r(foodGrowth),
+      egg: r(wrapper.eggTimer),
+    };
+    // Infinity（翼龙）无法过 JSON，省略后读档时按物种重新取默认值
+    if (Number.isFinite(wrapper.hungerTimer)) state.hunger = r(wrapper.hungerTimer);
+    return state;
   };
 
   wrapper.consume = (removeEntity) => {

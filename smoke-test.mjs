@@ -132,6 +132,49 @@ const i18nAfterReload = await page.evaluate(() => ({
   splashTitle: document.querySelector('.splash-card h1').textContent,
 }));
 
+// ---------------- 存档：保存 → 刷新 → 继续上次的世界 ----------------
+await page.locator('#start-btn').click();
+await page.waitForTimeout(500);
+const beforeSave = await page.evaluate(() => {
+  const w = window.__world;
+  for (let i = 0; i < 6; i++) w.terrain.sculpt({ x: 5, z: 5 }, 1);
+  // 锁住饥饿计时，避免校验窗口内恐龙互吃导致物种集合抖动
+  for (const e of w.entities) {
+    if (e.isDinosaur) {
+      e.hungerTimer = 999;
+      e.target = null;
+    }
+  }
+  w.saveWorld();
+  return {
+    height: w.terrain.getHeightAt(5, 5),
+    species: [...new Set(w.entities.filter((e) => e.isDinosaur).map((e) => e.species))].sort(),
+    hasSave: w.hasSave(),
+  };
+});
+await page.reload({ waitUntil: 'networkidle' });
+const continueVisible = await page.locator('#continue-btn').isVisible();
+await page.locator('#continue-btn').click();
+await page.waitForTimeout(300);
+const afterRestore = await page.evaluate(() => {
+  const w = window.__world;
+  return {
+    splashHidden: document.getElementById('splash').classList.contains('hidden'),
+    height: w.terrain.getHeightAt(5, 5),
+    species: [...new Set(w.entities.filter((e) => e.isDinosaur).map((e) => e.species))].sort(),
+  };
+});
+
+// ---------------- 存档：脏数据 → 静默回到正常开始页 ----------------
+await page.reload({ waitUntil: 'networkidle' }); // 回到未开始状态，后续 reload 不再自动存档
+await page.evaluate(() => localStorage.setItem('dino-world:save', '{garbage'));
+await page.reload({ waitUntil: 'networkidle' });
+const corruptState = await page.evaluate(() => ({
+  continueHidden: document.getElementById('continue-btn').classList.contains('hidden'),
+  splashVisible: !document.getElementById('splash').classList.contains('hidden'),
+  hasSave: window.__world.hasSave(),
+}));
+
 await browser.close();
 
 console.log('canvas:', `${Math.round(canvasBox.width)}x${Math.round(canvasBox.height)}`);
@@ -143,6 +186,9 @@ console.log('herbivore feeding:', herbivoreBefore, '->', herbivoreAfter);
 console.log('dinosaur state:', dinosaurState);
 console.log('i18n switch:', i18nState, ' after reload:', i18nAfterReload);
 console.log('heights codec roundtrip ok:', codecOk);
+console.log('save before:', beforeSave, ' continue visible:', continueVisible);
+console.log('after restore:', afterRestore);
+console.log('corrupt save state:', corruptState);
 console.log('console errors:', consoleErrors.length, consoleErrors.slice(0, 8));
 console.log('page errors:', pageErrors.length, pageErrors.slice(0, 8));
 
@@ -184,6 +230,22 @@ if (i18nAfterReload.lang !== 'en' || i18nAfterReload.title !== 'My Little World'
 }
 if (!codecOk) {
   console.error('\n❌ heightmap Int16 codec roundtrip failed');
+  process.exit(1);
+}
+if (!beforeSave.hasSave || !continueVisible || !afterRestore.splashHidden) {
+  console.error('\n❌ save/continue flow failed');
+  process.exit(1);
+}
+if (Math.abs(afterRestore.height - beforeSave.height) > 0.02) {
+  console.error('\n❌ restored terrain height mismatch');
+  process.exit(1);
+}
+if (JSON.stringify(afterRestore.species) !== JSON.stringify(beforeSave.species)) {
+  console.error('\n❌ restored species set mismatch');
+  process.exit(1);
+}
+if (!corruptState.continueHidden || !corruptState.splashVisible || corruptState.hasSave) {
+  console.error('\n❌ corrupt save was not silently discarded');
   process.exit(1);
 }
 console.log('\n✅ SMOKE TEST PASSED');

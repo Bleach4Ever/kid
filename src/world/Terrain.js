@@ -160,6 +160,22 @@ export class Terrain {
     return lerp(lerp(h00, h10, tx), lerp(h01, h11, tx), tz);
   }
 
+  // 存档：导出/恢复整张高度图
+  exportHeights() {
+    const heights = new Float32Array(this.pos.count);
+    for (let i = 0; i < this.pos.count; i++) heights[i] = this.pos.getY(i);
+    return heights;
+  }
+
+  applyHeights(arr) {
+    if (!arr || arr.length !== this.pos.count) return false;
+    for (let i = 0; i < this.pos.count; i++) {
+      this.pos.setY(i, clamp(arr[i], MIN_HEIGHT, MAX_HEIGHT));
+    }
+    this.refresh();
+    return true;
+  }
+
   isUnderWater(x, z) {
     return this.getHeightAt(x, z) < SEA_LEVEL - 0.15;
   }

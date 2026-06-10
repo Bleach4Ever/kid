@@ -152,6 +152,15 @@ export class Sky {
     Object.assign(this.tgt, this._toState(PRESETS[0]));
   }
 
+  // 读档直达：cur 与 tgt 一起设置，避免夜晚存档恢复时从白天淡入
+  setIndex(i) {
+    const n = PRESETS.length;
+    this.idx = (((i | 0) % n) + n) % n;
+    Object.assign(this.tgt, this._toState(PRESETS[this.idx]));
+    Object.assign(this.cur, this._toState(PRESETS[this.idx]));
+    this._apply(1);
+  }
+
   _apply(k) {
     const c = this.cur;
     const t = this.tgt;
