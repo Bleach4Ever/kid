@@ -725,6 +725,110 @@ body {
 }
 
 /* 零新资产剪影：未解锁卡片把彩色 SVG 压成深色影子 + 大问号 */
+/* 稀有度边框：common 默认 / uncommon 蓝 / rare 金色微光呼吸 */
+.pedia-card.rarity-uncommon {
+  box-shadow: 0 0 0 3px #7fb9ff, 0 5px 0 #e3d4ef;
+}
+
+.pedia-card.rarity-rare {
+  box-shadow: 0 0 0 3px #ffd24a, 0 5px 0 #e3d4ef;
+  animation: rare-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes rare-glow {
+  0%, 100% { box-shadow: 0 0 0 3px #ffd24a, 0 5px 0 #e3d4ef; }
+  50% { box-shadow: 0 0 0 3px #ffd24a, 0 0 18px #ffe89a, 0 5px 0 #e3d4ef; }
+}
+
+/* 神秘蛋专属的锁定卡：紫色调 ?，提示去野外找蛋 */
+.pedia-card.mystery .pedia-question {
+  color: #b9a4ff;
+  text-shadow: 0 0 12px #d9c4ff;
+}
+
+/* 锁定卡的无字解锁提示角标 */
+.pedia-hint {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 18px;
+  filter: drop-shadow(0 1px 2px rgba(60, 40, 80, 0.3));
+}
+
+/* 变体收集点：空心灰 → 实心变体色；sparkle 收集后闪烁 */
+.pedia-variants {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+}
+
+.pedia-variants .v-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid #d8cce6;
+  background: transparent;
+}
+
+.pedia-variants .v-dot.on {
+  border-color: #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.pedia-variants .v-dot.sparkle.on {
+  animation: dot-twinkle 1.6s ease-in-out infinite;
+}
+
+@keyframes dot-twinkle {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08); }
+  50% { transform: scale(1.25); box-shadow: 0 0 8px #ffe89a; }
+}
+
+/* 头部收集进度：三档芯片 + 总进度条 */
+.pedia-meter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px 10px;
+}
+
+.pedia-tier-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 2px 0 #e3d4ef;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.pedia-tier-chip i {
+  width: 14px;
+  height: 17px;
+  border-radius: 50% 50% 46% 46%;
+  box-shadow: inset -2px -3px 0 rgba(0, 0, 0, 0.08);
+}
+
+.pedia-progress {
+  flex: 1;
+  height: 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 1px 3px rgba(60, 40, 80, 0.15);
+  overflow: hidden;
+}
+
+.pedia-progress i {
+  display: block;
+  height: 100%;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #9ccf8a, #7fb9ff, #ffd24a);
+  transition: width 0.5s ease;
+}
+
 .pedia-card.locked .pedia-figure img {
   filter: brightness(0) opacity(0.35);
 }

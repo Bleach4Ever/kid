@@ -371,6 +371,14 @@ const pediaModal = await page.evaluate(() => {
     cards: modal.querySelectorAll('.pedia-card').length,
     locked: modal.querySelectorAll('.pedia-card.locked').length,
     badgeCleared: !document.querySelectorAll('#top-bar .tool-btn')[3].classList.contains('has-badge'),
+    // 收集钩子 UI：稀有度边框 / 三档进度芯片 + 总进度条 / 锁定提示角标 / 变体色点（只有 raptor seen → 4 点）
+    rare: modal.querySelectorAll('.pedia-card.rarity-rare').length,
+    uncommon: modal.querySelectorAll('.pedia-card.rarity-uncommon').length,
+    meterChips: modal.querySelectorAll('.pedia-tier-chip').length,
+    progressBar: !!modal.querySelector('.pedia-progress i'),
+    hints: modal.querySelectorAll('.pedia-hint').length,
+    mysteryCards: modal.querySelectorAll('.pedia-card.mystery').length,
+    swatchDots: modal.querySelectorAll('.v-dot').length,
   };
 });
 
@@ -444,6 +452,15 @@ const questDone = await page.evaluate(() => {
   };
 });
 
+// 新任务模板：开神秘蛋（badge ✨ + mystery 孵化事件完成）
+const mysteryQuest = await page.evaluate(() => {
+  const w = window.__world;
+  const q = w.quests._debugSet('mysteryOpen');
+  const badge = !!q.el.querySelector('.q-badge');
+  w.bus.emit('hatch', { species: 'trex', mystery: true });
+  return { done: q.done, badge };
+});
+
 // 强制星数到 3 → egg.golden 解锁写入 profile.unlocks
 const milestone = await page.evaluate(() => {
   const w = window.__world;
@@ -461,6 +478,14 @@ const magicSetup = await page.evaluate(() => {
   if (cur < 20) w.quests._debugAddStars(20 - cur);
   return { unlocks: JSON.parse(localStorage.getItem('dino-world:profile')).unlocks };
 });
+// 25 星 → 🍀 幸运符（变体概率翻倍 + 神秘蛋更勤），不出现在魔法面板
+const luckyState = await page.evaluate(() => {
+  const w = window.__world;
+  const cur = JSON.parse(localStorage.getItem('dino-world:profile')).stars;
+  if (cur < 25) w.quests._debugAddStars(25 - cur);
+  return { unlocks: JSON.parse(localStorage.getItem('dino-world:profile')).unlocks };
+});
+
 // 打开 ✨ → 魔法面板滑出，5 个按钮（🌈🌸🌠🌌🌋）全部可见
 await page.locator('#top-bar .tool-btn').nth(2).click({ force: true });
 await page.waitForTimeout(350);
@@ -870,6 +895,7 @@ console.log('pedia persists reload/reset:', pediaAfterReload, pediaAfterReset);
 console.log('quests init:', questInit);
 console.log('quest tree x5 done:', questDone);
 console.log('star milestone:', milestone);
+console.log('mystery quest:', mysteryQuest, ' lucky charm:', luckyState.unlocks.includes('charm.lucky'));
 console.log('magic first open:', magicFirstOpen, ' rainbow via panel:', rainbowShown);
 console.log('magic setup unlocks:', magicSetup.unlocks);
 console.log('magic panel:', magicPanel);
@@ -1036,6 +1062,20 @@ if (!pediaUnlock.raptorSeen || !pediaUnlock.toastShown || !pediaUnlock.badgeOn) 
 }
 if (!pediaModal.visible || pediaModal.cards !== 15 || pediaModal.locked !== 14 || !pediaModal.badgeCleared) {
   console.error('\n❌ pedia modal cards/silhouettes/badge state wrong');
+  process.exit(1);
+}
+if (pediaModal.rare !== 3 || pediaModal.uncommon !== 5 || pediaModal.meterChips !== 3 ||
+    !pediaModal.progressBar || pediaModal.hints !== 8 || pediaModal.mysteryCards !== 2 ||
+    pediaModal.swatchDots !== 4) {
+  console.error('\n❌ pedia collection UI (rarity/meter/hints/swatches) wrong', pediaModal);
+  process.exit(1);
+}
+if (!mysteryQuest.done || !mysteryQuest.badge) {
+  console.error('\n❌ mysteryOpen quest template did not complete', mysteryQuest);
+  process.exit(1);
+}
+if (!luckyState.unlocks.includes('charm.lucky')) {
+  console.error('\n❌ 25-star lucky charm milestone missing', luckyState);
   process.exit(1);
 }
 if (!beforePlaceCount.modalHidden || afterPlaceCount <= beforePlaceCount.entities) {

@@ -3,9 +3,14 @@
 // 未解锁卡片复用工具栏 SVG 图标做剪影（CSS filter），零新资产。
 import { SPECIES } from '../entities/Dinosaur.js';
 import { EGG_STYLES } from '../entities/Ecosystem.js';
+import { VARIANTS } from '../entities/Variants.js';
 import { profile } from '../systems/Profile.js';
+import { lockHint, MYSTERY_ONLY } from '../systems/Unlocks.js';
 import { showToast } from './Toast.js';
 import { t } from '../i18n.js';
+
+const TIERS = ['common', 'uncommon', 'rare'];
+const TIER_COLORS = { common: '#9ccf8a', uncommon: '#7fb9ff', rare: '#ffd24a' };
 
 const DIET_ICONS = { herbivore: '🌿', carnivore: '🍖', egg: '🥚', none: '🪽' };
 const STAMPS = [
@@ -101,18 +106,42 @@ export class Pedia {
       this.audio.click();
       this.close();
     });
-    const grid = el('div', 'pedia-grid', panel);
+    // 收集进度：每档一个芯片（彩蛋点 + 已孵化 n/m）+ 总进度条 —— 不识字也能看懂还差多少
     const pedia = profile.get('pedia', {});
+    const meter = el('div', 'pedia-meter', panel);
+    let totalHatched = 0;
+    const total = Object.keys(SPECIES).length;
+    for (const tier of TIERS) {
+      const ids = Object.keys(SPECIES).filter((id) => SPECIES[id].rarity === tier);
+      const hatched = ids.filter((id) => pedia[id]?.hatched).length;
+      totalHatched += hatched;
+      const chip = el('span', 'pedia-tier-chip', meter);
+      el('i', '', chip).style.background = TIER_COLORS[tier];
+      el('b', '', chip).textContent = `${hatched}/${ids.length}`;
+    }
+    const barWrap = el('div', 'pedia-progress', meter);
+    el('i', '', barWrap).style.width = `${Math.round((totalHatched / total) * 100)}%`;
+
+    const grid = el('div', 'pedia-grid', panel);
     for (const id in SPECIES) grid.appendChild(this._card(id, pedia[id] || {}));
   }
 
   _card(id, rec) {
-    const card = el('div', 'pedia-card' + (rec.seen ? '' : ' locked'));
+    const mysteryLocked = !rec.seen && MYSTERY_ONLY.has(id);
+    const card = el('div',
+      `pedia-card rarity-${SPECIES[id].rarity}`
+      + (rec.seen ? '' : ' locked')
+      + (mysteryLocked ? ' mystery' : ''));
     const figure = el('div', 'pedia-figure', card);
     const img = el('img', '', figure);
     img.src = `./icons/${id}.svg`;
     img.alt = rec.seen ? t(`tool.${id}`) : '';
     if (!rec.seen) el('span', 'pedia-question', figure).textContent = '?';
+    // 锁定卡片的无字提示：里程碑角标，或神秘蛋 ✨（去野外找紫色的蛋！）
+    if (!rec.seen) {
+      const hint = mysteryLocked ? '✨' : lockHint(id);
+      if (hint) el('span', 'pedia-hint', figure).textContent = hint;
+    }
     el('div', 'pedia-name', card).textContent = rec.seen ? t(`tool.${id}`) : '？？？';
     if (rec.seen) {
       const facts = el('div', 'pedia-facts', card);
@@ -123,6 +152,12 @@ export class Pedia {
       const egg = el('span', 'pedia-egg', facts);
       egg.style.background = EGG_STYLES[id].shell;
       el('i', '', egg).style.background = EGG_STYLES[id].spot;
+      // 变体收集点：实心 = 已孵到该配色，sparkle 收集后会闪
+      const swatches = el('div', 'pedia-variants', card);
+      for (const key in VARIANTS) {
+        const dot = el('i', 'v-dot' + (rec.variants?.[key] ? ' on' : '') + (key === 'sparkle' ? ' sparkle' : ''), swatches);
+        if (rec.variants?.[key]) dot.style.background = VARIANTS[key].body;
+      }
     }
     const stamps = el('div', 'pedia-stamps', card);
     for (const s of STAMPS) {

@@ -26,6 +26,12 @@ const TEMPLATES = [
   { id: 'rain', icon: '🌧️', count: 1, match: (type, p) => type === 'action' && p.id === 'rain' },
   { id: 'pet', icon: '💗', count: 3, match: (type) => type === 'pet' },
   { id: 'eat', icon: '😋', count: 2, match: (type) => type === 'eat' },
+  {
+    id: 'petSpecies', species: true, badge: '💗', count: 2,
+    match: (type, p, q) => type === 'pet' && p.species === q.species,
+  },
+  { id: 'raiseAny', icon: '⭐', count: 1, match: (type) => type === 'raised' },
+  { id: 'mysteryOpen', icon: '🥚', badge: '✨', count: 1, match: (type, p) => type === 'hatch' && !!p.mystery },
 ];
 
 // 星星里程碑 → 解锁 id（event.* 的按钮/玩法在阶段 6 读取 unlocks 实现）
@@ -35,6 +41,8 @@ const MILESTONES = [
   { stars: 10, id: 'event.meteor', icon: '🌠' },
   { stars: 15, id: 'event.aurora', icon: '🌌' },
   { stars: 20, id: 'event.volcano', icon: '🌋' },
+  // 🍀 幸运符：变体概率翻倍 + 神秘蛋间隔 -25%（rollVariant / MysteryEggs 直接读 unlocks）
+  { stars: 25, id: 'charm.lucky', icon: '🍀' },
 ];
 
 const ACTIVE_COUNT = 3;
@@ -51,7 +59,7 @@ export class Quests {
     this._applyUnlocks(profile.get('unlocks', []));
     this._applyTitles();
     onLangChange(() => this._applyTitles());
-    for (const type of ['place', 'hatch', 'sculpt', 'eat', 'pet', 'action']) {
+    for (const type of ['place', 'hatch', 'sculpt', 'eat', 'pet', 'action', 'raised']) {
       bus.on(type, (payload) => this._onEvent(type, payload));
     }
     while (this.active.length < ACTIVE_COUNT) this._draw();
@@ -92,14 +100,14 @@ export class Quests {
       img.src = `./icons/${quest.species}.svg`;
       img.alt = t(`tool.${quest.species}`);
       fig.appendChild(img);
-      if (tpl.badge) {
-        const badge = document.createElement('i');
-        badge.className = 'q-badge';
-        badge.textContent = tpl.badge;
-        fig.appendChild(badge);
-      }
     } else {
       fig.textContent = tpl.icon;
+    }
+    if (tpl.badge) {
+      const badge = document.createElement('i');
+      badge.className = 'q-badge';
+      badge.textContent = tpl.badge;
+      fig.appendChild(badge);
     }
     chip.appendChild(fig);
     const dots = document.createElement('span');
