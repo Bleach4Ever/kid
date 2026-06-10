@@ -20,6 +20,7 @@ import { Quests } from './systems/Quests.js';
 import { encodeHeightsI16, decodeHeightsI16 } from './systems/Storage.js';
 import { loadSave, clearSave, serializeWorld, hasSave } from './systems/SaveGame.js';
 import { initLang, t, setLang, getLang, onLangChange, applyDom } from './i18n.js';
+import { profile } from './systems/Profile.js';
 import { createTree, createFlower } from './entities/Tree.js';
 import { createDinosaur, SPECIES } from './entities/Dinosaur.js';
 import { createEgg, createNest as createNestEntity, createPoop } from './entities/Ecosystem.js';
@@ -580,6 +581,8 @@ window.__world = {
   sky,
   weather,
   worldEvents,
+  profile,
+  seaLevel: SEA_LEVEL,
   lastPet: 0, // 调试计数：冒烟测试验证“点恐龙=抚摸”
 };
 bus.on('pet', () => { window.__world.lastPet++; });

@@ -13,7 +13,7 @@ const MOODS = {
   night: { step: 0.9, maxIdx: 4, mult: 0.5, type: 'sine', peak: 0.06, prob: 0.5, pad: 0.25 },
 };
 
-// 7 物种叫声配方
+// 各物种叫声配方
 const CRIES = {
   trex: (a) => a._tone(130, 0.45, { type: 'triangle', peak: 0.16, slideTo: 75 }),
   brachiosaurus: (a) => {
@@ -31,6 +31,23 @@ const CRIES = {
   },
   oviraptor: (a) => a._tone(600, 0.16, { type: 'sawtooth', peak: 0.05, slideTo: 900 }),
   pterosaur: (a) => a._tone(1100, 0.5, { type: 'sawtooth', peak: 0.04, slideTo: 1600, echo: true }),
+  ankylosaurus: (a) => a._tone(150, 0.3, { type: 'square', peak: 0.07, slideTo: 105 }),
+  parasaurolophus: (a) => a._tone(380, 0.42, { type: 'sawtooth', peak: 0.05, slideTo: 540, echo: true }),
+  pachycephalosaurus: (a) => {
+    a._tone(500, 0.1, { type: 'square', peak: 0.06, slideTo: 430 });
+    a._tone(500, 0.1, { type: 'square', peak: 0.06, when: 0.14, slideTo: 430 });
+  },
+  dilophosaurus: (a) => {
+    a._tone(900, 0.13, { type: 'sawtooth', peak: 0.05, slideTo: 1300 });
+    a._tone(640, 0.12, { type: 'sawtooth', peak: 0.04, when: 0.18, slideTo: 500 });
+  },
+  diplodocus: (a) => a._tone(170, 0.5, { type: 'sine', peak: 0.13, slideTo: 135 }),
+  spinosaurus: (a) => a._tone(110, 0.5, { type: 'sawtooth', peak: 0.08, slideTo: 70 }),
+  therizinosaurus: (a) => {
+    a._tone(420, 0.24, { type: 'triangle', peak: 0.1, slideTo: 360 });
+    a._tone(360, 0.22, { type: 'triangle', peak: 0.09, when: 0.26, slideTo: 470 });
+  },
+  mosasaurus: (a) => a._tone(220, 0.5, { type: 'sine', peak: 0.12, slideTo: 90, echo: true }),
 };
 
 export class Audio {

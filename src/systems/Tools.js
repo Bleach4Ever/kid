@@ -1,20 +1,30 @@
 // 工具定义与当前选中状态
+import { SPECIES } from '../entities/Dinosaur.js';
 
 // 可选中的“神力”（底部工具栏）；label 是 i18n key，渲染时用 t() 解析；
 // cat = 视觉类别（按钮 data-cat 着色 + 类别间隙）：earth/plant/herb/carn/special
-export const TOOLS = [
+export const BASE_TOOLS = [
   { id: 'mountain', icon: '⛰️', label: 'tool.mountain', type: 'sculpt', dir: 1, cat: 'earth' },
   { id: 'ocean', icon: '🌊', label: 'tool.ocean', type: 'sculpt', dir: -1, cat: 'earth' },
   { id: 'tree', icon: '🌳', label: 'tool.tree', type: 'place', kind: 'tree', cat: 'plant' },
   { id: 'flower', icon: '🌷', label: 'tool.flower', type: 'place', kind: 'flower', cat: 'plant' },
-  { id: 'triceratops', icon: './icons/triceratops.svg', label: 'tool.triceratops', type: 'place', kind: 'triceratops', cat: 'herb' },
-  { id: 'brachiosaurus', icon: './icons/brachiosaurus.svg', label: 'tool.brachiosaurus', type: 'place', kind: 'brachiosaurus', cat: 'herb' },
-  { id: 'stegosaurus', icon: './icons/stegosaurus.svg', label: 'tool.stegosaurus', type: 'place', kind: 'stegosaurus', cat: 'herb' },
-  { id: 'trex', icon: './icons/trex.svg', label: 'tool.trex', type: 'place', kind: 'trex', cat: 'carn' },
-  { id: 'raptor', icon: './icons/raptor.svg', label: 'tool.raptor', type: 'place', kind: 'raptor', cat: 'carn' },
-  { id: 'oviraptor', icon: './icons/oviraptor.svg', label: 'tool.oviraptor', type: 'place', kind: 'oviraptor', cat: 'special' },
-  { id: 'pterosaur', icon: './icons/pterosaur.svg', label: 'tool.pterosaur', type: 'place', kind: 'pterosaur', cat: 'special' },
 ];
+
+// 恐龙按钮直接由物种表生成：加物种零工具栏代码；按类别排序保持分组紧凑
+const DIET_CAT = { herbivore: 'herb', carnivore: 'carn' };
+const CAT_ORDER = { herb: 0, carn: 1, special: 2 };
+export const DINO_TOOLS = Object.keys(SPECIES)
+  .map((id) => ({
+    id,
+    icon: `./icons/${id}.svg`,
+    label: `tool.${id}`,
+    type: 'place',
+    kind: id,
+    cat: DIET_CAT[SPECIES[id].diet] || 'special',
+  }))
+  .sort((a, b) => CAT_ORDER[a.cat] - CAT_ORDER[b.cat]);
+
+export const TOOLS = [...BASE_TOOLS, ...DINO_TOOLS];
 
 // 点一下立刻触发的动作（顶部按钮）；✨ 是魔法面板的开关
 export const ACTIONS = [

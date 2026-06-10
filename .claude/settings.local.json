@@ -1,4 +1,13 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(git -C /Users/myd/code/kid log --oneline)",
+      "Bash(git add *)",
+      "Bash(git commit -m 'docs: add CLAUDE.md for Claude Code guidance *)",
+      "Bash(git push *)",
+      "Bash(git commit -m 'docs: update AGENTS.md to reflect current systems and pipelines *)"
+    ]
+  },
   "enabledMcpjsonServers": [
     "mysql_mcp_alchemy_prod"
   ]

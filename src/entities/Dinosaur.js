@@ -8,34 +8,68 @@ const toothMat = new THREE.MeshStandardMaterial({ color: '#fff8df', flatShading:
 const zzzMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85, depthTest: false });
 const HEART_COLORS = ['#ff6f9c', '#ff9ec4', '#ffd3e2'];
 
+// rarity：common 初始可用 / uncommon 里程碑解锁 / rare 里程碑或仅神秘蛋；
+// 只影响获取渠道与视觉炫耀，不影响任何玩法数值（无竞争设计）
 const SPECIES = {
   triceratops: {
     diet: 'herbivore', baseSize: 1.05, speed: 1.45,
-    body: '#78c96b', accent: '#d8ef9c',
+    body: '#78c96b', accent: '#d8ef9c', rarity: 'common',
   },
   brachiosaurus: {
     diet: 'herbivore', baseSize: 1.3, speed: 1.05,
-    body: '#67b9a6', accent: '#a9e0cc',
+    body: '#67b9a6', accent: '#a9e0cc', rarity: 'common',
   },
   stegosaurus: {
     diet: 'herbivore', baseSize: 1.05, speed: 1.25,
-    body: '#e4ad59', accent: '#ffdf7e',
+    body: '#e4ad59', accent: '#ffdf7e', rarity: 'common',
   },
   trex: {
     diet: 'carnivore', baseSize: 1.2, speed: 1.65,
-    body: '#d96b5f', accent: '#ffb07d',
+    body: '#d96b5f', accent: '#ffb07d', rarity: 'common',
   },
   raptor: {
     diet: 'carnivore', baseSize: 0.72, speed: 2.35,
-    body: '#9a79d1', accent: '#d2b8ff',
+    body: '#9a79d1', accent: '#d2b8ff', rarity: 'common',
   },
   oviraptor: {
     diet: 'egg', baseSize: 0.76, speed: 2.1,
-    body: '#e58d45', accent: '#ffe080',
+    body: '#e58d45', accent: '#ffe080', rarity: 'common',
   },
   pterosaur: {
     diet: 'none', baseSize: 0.9, speed: 0.65,
-    body: '#5ea5d8', accent: '#a8dcf5', flying: true,
+    body: '#5ea5d8', accent: '#a8dcf5', flying: true, rarity: 'common',
+  },
+  ankylosaurus: {
+    diet: 'herbivore', baseSize: 1.0, speed: 0.95,
+    body: '#8aa45e', accent: '#e0cf8a', rarity: 'uncommon',
+  },
+  parasaurolophus: {
+    diet: 'herbivore', baseSize: 0.95, speed: 1.55,
+    body: '#5fb8c9', accent: '#ffd9a0', rarity: 'uncommon',
+  },
+  pachycephalosaurus: {
+    diet: 'herbivore', baseSize: 0.85, speed: 1.8,
+    body: '#c98ab0', accent: '#ffe2f0', rarity: 'uncommon',
+  },
+  dilophosaurus: {
+    diet: 'carnivore', baseSize: 0.8, speed: 2.0,
+    body: '#6fae6a', accent: '#ff9a62', rarity: 'uncommon',
+  },
+  diplodocus: {
+    diet: 'herbivore', baseSize: 1.25, speed: 1.0,
+    body: '#7f9bd1', accent: '#c5daf5', rarity: 'uncommon',
+  },
+  spinosaurus: {
+    diet: 'carnivore', baseSize: 1.25, speed: 1.4,
+    body: '#4f8fb8', accent: '#ffcf70', rarity: 'rare',
+  },
+  therizinosaurus: {
+    diet: 'herbivore', baseSize: 1.0, speed: 1.3,
+    body: '#9db86a', accent: '#fff3c9', rarity: 'rare',
+  },
+  mosasaurus: {
+    diet: 'none', baseSize: 1.3, speed: 0.85,
+    body: '#4d7fd1', accent: '#aee3f5', swimming: true, rarity: 'rare',
   },
 };
 
@@ -179,6 +213,127 @@ function buildOviraptor(bodyMat, accentMat) {
   return model;
 }
 
+// 甲龙：扁宽身体 + 两排背甲锥刺 + 球形尾锤
+function buildAnkylosaurus(bodyMat, accentMat) {
+  const g = new THREE.Group();
+  mesh(new THREE.IcosahedronGeometry(0.74, 1), bodyMat, g, [0, 0.78, 0], [1.25, 0.6, 1.5]);
+  const head = mesh(new THREE.IcosahedronGeometry(0.3, 1), bodyMat, g, [0, 0.7, 1.18], [1, 0.78, 1.1]);
+  addEyes(head, 0.1, 0.26, 0.16, 0.05);
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 4; i++) {
+      const spike = mesh(new THREE.ConeGeometry(0.13, 0.32, 5), accentMat, g, [side * 0.4, 1.12, -0.72 + i * 0.48]);
+      spike.rotation.z = side * -0.5;
+    }
+  }
+  addTail(g, bodyMat, [0, 0.72, -1.25], 1.0, 0.18);
+  mesh(new THREE.IcosahedronGeometry(0.24, 1), accentMat, g, [0, 0.72, -1.85]);
+  addLegs(g, bodyMat, [[-0.52, -0.52], [0.52, -0.52], [-0.52, 0.55], [0.52, 0.55]], 0.5, 0.13);
+  return { group: g, stepParts: [] };
+}
+
+// 副栉龙：双足身板 + 向后掠的圆柱头冠 + 扁嘴
+function buildParasaurolophus(bodyMat, accentMat) {
+  const model = buildPredator(bodyMat, accentMat, true);
+  const g = model.group;
+  const crest = mesh(new THREE.CylinderGeometry(0.07, 0.12, 0.85, 6), accentMat, g, [0, 1.32, 0.68]);
+  crest.rotation.x = -0.95;
+  const snout = mesh(new THREE.BoxGeometry(0.3, 0.14, 0.36), accentMat, g, [0, 1.0, 1.32]);
+  snout.rotation.x = 0.06;
+  return model;
+}
+
+// 肿头龙：双足 + 大圆顶头 + 围着后脑的一圈小锥
+function buildPachycephalosaurus(bodyMat, accentMat) {
+  const model = buildPredator(bodyMat, accentMat, true);
+  const g = model.group;
+  mesh(new THREE.SphereGeometry(0.3, 8, 6), accentMat, g, [0, 1.32, 0.82], [1, 0.85, 1]);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * TAU;
+    const spike = mesh(
+      new THREE.ConeGeometry(0.05, 0.16, 5), accentMat, g,
+      [Math.cos(a) * 0.28, 1.3, 0.82 + Math.sin(a) * 0.28]
+    );
+    spike.rotation.x = Math.sin(a) * 1.1;
+    spike.rotation.z = -Math.cos(a) * 1.1;
+  }
+  return model;
+}
+
+// 双冠龙：小型猎手 + 头顶两片立起的半圆冠
+function buildDilophosaurus(bodyMat, accentMat) {
+  const model = buildPredator(bodyMat, accentMat, true);
+  const g = model.group;
+  for (const side of [-1, 1]) {
+    const crest = mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.05, 8), accentMat, g, [side * 0.09, 1.34, 0.92]);
+    crest.rotation.z = Math.PI / 2;
+    crest.scale.set(1, 1, 1.35);
+  }
+  return model;
+}
+
+// 梁龙：近水平前伸的长颈（区别腕龙的竖颈）+ 两段鞭状长尾
+function buildDiplodocus(bodyMat, accentMat) {
+  const g = new THREE.Group();
+  mesh(new THREE.IcosahedronGeometry(0.68, 1), bodyMat, g, [0, 1.0, -0.1], [1, 0.72, 1.5]);
+  const neck = mesh(new THREE.CylinderGeometry(0.16, 0.3, 1.9, 7), bodyMat, g, [0, 1.32, 1.05]);
+  neck.rotation.x = Math.PI / 2 - 0.35;
+  const head = mesh(new THREE.IcosahedronGeometry(0.24, 1), accentMat, g, [0, 1.64, 1.95], [0.85, 0.7, 1.2]);
+  addEyes(head, 0.07, 0.2, 0.13, 0.045);
+  addLegs(g, bodyMat, [[-0.4, -0.6], [0.4, -0.6], [-0.4, 0.45], [0.4, 0.45]], 0.85, 0.13);
+  addTail(g, bodyMat, [0, 1.0, -1.5], 1.5, 0.24);
+  addTail(g, bodyMat, [0, 1.0, -2.6], 1.2, 0.09);
+  return { group: g, stepParts: [] };
+}
+
+// 棘龙：大型猎手 + 5 片扁锥背帆 + 鳄鱼长吻
+function buildSpinosaurus(bodyMat, accentMat) {
+  const model = buildPredator(bodyMat, accentMat, false);
+  const g = model.group;
+  for (let i = 0; i < 5; i++) {
+    const h = 0.5 + Math.sin((i / 4) * Math.PI) * 0.38;
+    mesh(new THREE.ConeGeometry(0.17, h, 4), accentMat, g, [0, 1.42 + h * 0.32, -0.78 + i * 0.36], [0.4, 1, 1]);
+  }
+  const snout = mesh(new THREE.BoxGeometry(0.28, 0.18, 0.66), bodyMat, g, [0, 1.34, 1.5]);
+  snout.rotation.x = 0.05;
+  return model;
+}
+
+// 镰刀龙：圆滚滚的浅色绒毛肚 + 每只手臂 3 根下垂长爪
+function buildTherizinosaurus(bodyMat, accentMat) {
+  const model = buildPredator(bodyMat, accentMat, true);
+  const g = model.group;
+  mesh(new THREE.IcosahedronGeometry(0.42, 1), accentMat, g, [0, 0.78, 0.3], [0.85, 0.72, 0.9]);
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      const claw = mesh(new THREE.ConeGeometry(0.035, 0.42, 5), toothMat, g, [side * (0.32 + i * 0.08), 0.62, 0.68]);
+      claw.rotation.x = Math.PI;
+    }
+  }
+  return model;
+}
+
+// 沧龙：鱼雷形身体 + 四鳍 + 竖立尾鳍，swimming 运动模式（不长腿）
+function buildMosasaurus(bodyMat, accentMat) {
+  const g = new THREE.Group();
+  mesh(new THREE.IcosahedronGeometry(0.62, 1), bodyMat, g, [0, 0.55, 0], [0.85, 0.7, 1.9]);
+  const head = mesh(new THREE.IcosahedronGeometry(0.34, 1), bodyMat, g, [0, 0.6, 1.2], [0.8, 0.65, 1.3]);
+  const jaw = mesh(new THREE.BoxGeometry(0.34, 0.14, 0.5), accentMat, g, [0, 0.45, 1.42]);
+  jaw.rotation.x = 0.06;
+  addEyes(head, 0.12, 0.3, 0.18, 0.05);
+  const flippers = [];
+  for (const side of [-1, 1]) {
+    for (const z of [0.55, -0.45]) {
+      const flipper = mesh(new THREE.ConeGeometry(0.16, 0.55, 4), accentMat, g, [side * 0.52, 0.4, z]);
+      flipper.rotation.z = side * (Math.PI / 2 + 0.35);
+      flippers.push(flipper);
+    }
+  }
+  addTail(g, bodyMat, [0, 0.55, -1.35], 1.1, 0.22);
+  const fluke = mesh(new THREE.ConeGeometry(0.34, 0.55, 3), accentMat, g, [0, 0.74, -1.92], [0.3, 1, 1]);
+  fluke.rotation.x = -0.5;
+  return { group: g, flippers, stepParts: [] };
+}
+
 function addAlertMarker(group) {
   const marker = new THREE.Group();
   const yellow = new THREE.MeshBasicMaterial({ color: '#ffe34f', depthTest: false });
@@ -218,6 +373,14 @@ function buildModel(species, config) {
   if (species === 'trex') return buildPredator(bodyMat, accentMat, false);
   if (species === 'raptor') return buildPredator(bodyMat, accentMat, true);
   if (species === 'oviraptor') return buildOviraptor(bodyMat, accentMat);
+  if (species === 'ankylosaurus') return buildAnkylosaurus(bodyMat, accentMat);
+  if (species === 'parasaurolophus') return buildParasaurolophus(bodyMat, accentMat);
+  if (species === 'pachycephalosaurus') return buildPachycephalosaurus(bodyMat, accentMat);
+  if (species === 'dilophosaurus') return buildDilophosaurus(bodyMat, accentMat);
+  if (species === 'diplodocus') return buildDiplodocus(bodyMat, accentMat);
+  if (species === 'spinosaurus') return buildSpinosaurus(bodyMat, accentMat);
+  if (species === 'therizinosaurus') return buildTherizinosaurus(bodyMat, accentMat);
+  if (species === 'mosasaurus') return buildMosasaurus(bodyMat, accentMat);
   return buildPterosaur(bodyMat, accentMat);
 }
 
@@ -234,7 +397,8 @@ function nearestFood(self, entities) {
     if (entity === self || !entity.alive || entity.consumed) continue;
     if (self.diet === 'herbivore' && entity.kind !== 'tree' && entity.kind !== 'flower') continue;
     if (self.diet === 'carnivore') {
-      if (!entity.isDinosaur || entity.flying || entity.size >= self.size * 0.8) continue;
+      // 飞行/游泳的恐龙不在地面猎手的菜单上
+      if (!entity.isDinosaur || entity.flying || entity.swimming || entity.size >= self.size * 0.8) continue;
     }
     if (self.diet === 'egg' && !entity.isEgg) continue;
     if (self.diet === 'none') continue;
@@ -280,6 +444,7 @@ export function createDinosaur(species, saved = null) {
     diet: config.diet,
     isDinosaur: true,
     flying: Boolean(config.flying),
+    swimming: Boolean(config.swimming),
     alive: true,
     consumed: false,
     size: config.baseSize * 0.65,
@@ -334,6 +499,15 @@ export function createDinosaur(species, saved = null) {
       if (ctx.terrain.getHeightAt(candidate.x, candidate.z) > SEA_LEVEL + 0.15) return candidate;
     }
     return diskTarget(BOUND * 0.75);
+  }
+
+  // 沧龙的游走目标：优先找深水点；整张图没水就退化为陆地慢速漫步（无害）
+  function chooseWaterTarget(ctx) {
+    for (let i = 0; i < 8; i++) {
+      const candidate = diskTarget(BOUND * 0.7);
+      if (ctx.terrain.getHeightAt(candidate.x, candidate.z) < SEA_LEVEL - 0.6) return candidate;
+    }
+    return null;
   }
 
   function moveToward(target, dt, terrain, speedMultiplier = 1) {
@@ -396,21 +570,24 @@ export function createDinosaur(species, saved = null) {
     const nest = wrapper.nestTarget;
     if (!nest) return false;
 
-    if (wrapper.flying) {
+    if (wrapper.flying || wrapper.swimming) {
       wrapper.lifeState = 'seeking-nest';
       const p = group.position;
-      const targetY = ctx.terrain.getHeightAt(nest.object3d.position.x, nest.object3d.position.z) + 5;
+      // 翼龙飞到巢上空投蛋；沧龙游到巢边水面（近岸贴地），把蛋抛进巢里
+      const targetY = wrapper.flying
+        ? ctx.terrain.getHeightAt(nest.object3d.position.x, nest.object3d.position.z) + 5
+        : Math.max(ctx.terrain.getHeightAt(p.x, p.z), SEA_LEVEL - 0.22);
       const dx = nest.object3d.position.x - p.x;
       const dz = nest.object3d.position.z - p.z;
       const distance = Math.hypot(dx, dz);
       if (distance > 0.08) {
-        const speed = config.speed * 5;
+        const speed = config.speed * (wrapper.flying ? 5 : 2.5);
         p.x += (dx / distance) * speed * dt;
         p.z += (dz / distance) * speed * dt;
         p.y += (targetY - p.y) * Math.min(1, dt * 2);
         group.rotation.y = Math.atan2(dx, dz);
       }
-      if (distance < 1.2) {
+      if (distance < (wrapper.swimming ? 2.2 : 1.2)) {
         wrapper.lifeState = 'laying';
         layingTime += dt;
         if (layingTime >= 0.6) finishLaying(ctx);
@@ -516,6 +693,29 @@ export function createDinosaur(species, saved = null) {
       return;
     }
 
+    if (wrapper.swimming) {
+      // 游泳：朝水中目标巡游，水面下沉浮 + 鳍摆动；被放上岸会贴地滑回最近的水
+      if (Math.hypot(wanderTarget.x - group.position.x, wanderTarget.z - group.position.z) < 1) {
+        wanderTarget = chooseWaterTarget(ctx) || chooseLandTarget(ctx);
+      }
+      const p = group.position;
+      const dx = wanderTarget.x - p.x;
+      const dz = wanderTarget.z - p.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance > 0.05) {
+        p.x += (dx / distance) * config.speed * dt;
+        p.z += (dz / distance) * config.speed * dt;
+        group.rotation.y = Math.atan2(dx, dz);
+      }
+      const ground = ctx.terrain.getHeightAt(p.x, p.z);
+      p.y = Math.max(ground, SEA_LEVEL - 0.22 + Math.sin(ctx.time * 1.6) * 0.16);
+      for (let i = 0; i < model.flippers.length; i++) {
+        model.flippers[i].rotation.x = Math.sin(ctx.time * 3 + i) * 0.45;
+      }
+      group.rotation.z = Math.sin(ctx.time * 1.2) * 0.06;
+      return;
+    }
+
     // 睡觉：夜晚无目标就地入睡，呼吸起伏 + 💤；白天或被摸醒后恢复
     wakeTimer = Math.max(0, wakeTimer - dt);
     if (wrapper.lifeState === 'sleeping' && ctx.skyPhase !== 'night') {
@@ -600,7 +800,7 @@ export function createDinosaur(species, saved = null) {
   };
 
   wrapper.consume = (removeEntity) => {
-    if (!wrapper.alive || wrapper.consumed || wrapper.flying) return false;
+    if (!wrapper.alive || wrapper.consumed || wrapper.flying || wrapper.swimming) return false;
     wrapper.consumed = true;
     let elapsed = 0;
     const startScale = visualScale;

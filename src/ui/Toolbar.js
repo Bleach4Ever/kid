@@ -41,6 +41,7 @@ export class Toolbar {
     const bottom = document.getElementById('toolbar');
     for (const t of TOOLS) {
       const b = makeBtn(t.icon, t.label, false);
+      b.dataset.tool = t.id; // 测试与样式都用 id 定位，不依赖按钮顺序
       if (t.cat) b.dataset.cat = t.cat; // CSS 按类别着色 + 类别间隙
       b.addEventListener('click', () => {
         audio.click();

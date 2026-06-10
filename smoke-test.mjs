@@ -56,20 +56,30 @@ await page.evaluate(() => {
     }
   }
 });
-const tools = [
-  'mountain', 'ocean', 'tree', 'flower', 'triceratops',
-  'brachiosaurus', 'stegosaurus', 'trex', 'raptor', 'oviraptor', 'pterosaur',
-];
-for (const t of tools.slice(2)) {
-  await page.locator('#toolbar .tool-btn').nth(tools.indexOf(t)).click({ force: true });
+// 全部 15 个物种 + 树/花，按钮用 data-tool 定位（不依赖顺序）
+const placeTools = await page.evaluate(() =>
+  [...document.querySelectorAll('#toolbar .tool-btn')]
+    .map((b) => b.dataset.tool)
+    .filter((id) => !['mountain', 'ocean'].includes(id)));
+for (const t of placeTools) {
+  await page.locator(`#toolbar .tool-btn[data-tool="${t}"]`).click({ force: true });
   await page.mouse.click(520, 380);
   await page.evaluate(() => {
     const w = window.__world;
     const last = w.entities[w.entities.length - 1];
-    if (last?.isDinosaur && !last.flying) last.object3d.position.x -= 9;
+    if (last?.isDinosaur && !last.flying && !last.swimming) last.object3d.position.x -= 9;
   });
   await page.waitForTimeout(80);
 }
+// 冻结生态：15 只挤在角落会互吃；之后的进食测试再精确解锁个别恐龙
+await page.evaluate(() => {
+  for (const e of window.__world.entities) {
+    if (e.isDinosaur) {
+      e.hungerTimer = 999;
+      e.target = null;
+    }
+  }
+});
 // 顶部：昼夜、下雨、✨（打开魔法面板）
 for (let i = 0; i < 3; i++) {
   await page.locator('#top-bar .tool-btn').nth(i).click({ force: true });
@@ -119,9 +129,33 @@ const entityCount = await page.evaluate(() => window.__world.entities.length);
 const dinosaurState = await page.evaluate(() => {
   const w = window.__world;
   return {
-    species: w.entities.filter((e) => e.isDinosaur).map((e) => e.species),
+    species: [...new Set(w.entities.filter((e) => e.isDinosaur).map((e) => e.species))],
     pterosaurAlive: w.entities.some((e) => e.species === 'pterosaur' && e.alive),
     raptorAlive: w.entities.some((e) => e.species === 'raptor' && e.alive),
+  };
+});
+
+// 沧龙：游泳模式 → 放进深水后身体贴着海面沉浮（不会飞上天/站在山上）
+const mosasaurState = await page.evaluate(async () => {
+  const w = window.__world;
+  const mosa = w.entities.find((e) => e.species === 'mosasaurus');
+  if (!mosa) return { exists: false };
+  let wx = null;
+  let wz = null;
+  for (let x = -25; x <= 25 && wx === null; x += 2) {
+    for (let z = -25; z <= 25; z += 2) {
+      if (w.terrain.getHeightAt(x, z) < w.seaLevel - 0.8) { wx = x; wz = z; break; }
+    }
+  }
+  if (wx === null) return { exists: true, water: false };
+  mosa.object3d.position.set(wx, 5, wz);
+  await new Promise((r) => setTimeout(r, 400));
+  return {
+    exists: true,
+    water: true,
+    alive: mosa.alive,
+    swimming: mosa.swimming,
+    nearSurface: Math.abs(mosa.object3d.position.y - w.seaLevel) < 0.9,
   };
 });
 
@@ -164,6 +198,9 @@ await page.waitForTimeout(500);
 const beforeSave = await page.evaluate(() => {
   const w = window.__world;
   for (let i = 0; i < 6; i++) w.terrain.sculpt({ x: 5, z: 5 }, 1);
+  // 新物种也参与存档往返（甲龙走陆地分支、沧龙走游泳分支）
+  w.placeEntity({ x: 6, z: -6 }, 'ankylosaurus');
+  w.placeEntity({ x: -6, z: 6 }, 'mosasaurus');
   // 锁住饥饿计时，避免校验窗口内恐龙互吃导致物种集合抖动
   for (const e of w.entities) {
     if (e.isDinosaur) {
@@ -272,7 +309,7 @@ await page.evaluate(() => {
     }
   }
 });
-await page.locator('#toolbar .tool-btn').nth(8).click({ force: true }); // 迅猛龙
+await page.locator('#toolbar .tool-btn[data-tool="raptor"]').click({ force: true }); // 迅猛龙
 await page.mouse.click(520, 380);
 await page.waitForTimeout(250);
 const pediaUnlock = await page.evaluate(() => ({
@@ -346,7 +383,7 @@ const questInit = await page.evaluate(() => {
     starsBefore: JSON.parse(localStorage.getItem('dino-world:profile')).stars || 0,
   };
 });
-await page.locator('#toolbar .tool-btn').nth(2).click({ force: true }); // 种树
+await page.locator('#toolbar .tool-btn[data-tool="tree"]').click({ force: true }); // 种树
 for (let i = 0; i < 5; i++) {
   await page.mouse.click(430 + i * 24, 380);
   await page.waitForTimeout(120);
@@ -449,6 +486,30 @@ const volcanoState = await page.evaluate(() => {
 // 事件结束后渲染仍正常
 await page.waitForTimeout(400);
 const finalTriangles = await page.evaluate(() => window.__world.stage.renderer.info.render.triangles);
+
+// ---------------- Profile v1 → v2 迁移 ----------------
+// 写入带图鉴印章的 v1 档案 → 加载后 counters 慷慨回填（老玩家进度不清零）
+await page.evaluate(() => {
+  localStorage.setItem('dino-world:profile', JSON.stringify({
+    v: 1,
+    stars: 4,
+    pedia: {
+      triceratops: { seen: true, hatched: true, raised: true },
+      trex: { seen: true, hatched: true, raised: true },
+      raptor: { seen: true, hatched: false, raised: false },
+    },
+  }));
+});
+await page.reload({ waitUntil: 'networkidle' });
+const migrated = await page.evaluate(() => {
+  const w = window.__world;
+  return {
+    v: w.profile.get('v'),
+    ...w.profile.get('counters'),
+    pity: w.profile.get('mystery').pity,
+    stars: w.profile.get('stars'),
+  };
+});
 
 // ---------------- 阶段 7：无文字引导 + 按钮类别 ----------------
 // 清 localStorage = 新玩家 → 开始 1s 后 #tutorial 出现，第一步光环在造山按钮
@@ -657,6 +718,8 @@ console.log('render triangles:', renderStats.triangles, ' draw calls:', renderSt
 console.log('entities placed:', entityCount);
 console.log('herbivore feeding:', herbivoreBefore, '->', herbivoreAfter);
 console.log('dinosaur state:', dinosaurState);
+console.log('mosasaurus swim:', mosasaurState);
+console.log('profile v1->v2 migration:', migrated);
 console.log('i18n switch:', i18nState, ' after reload:', i18nAfterReload);
 console.log('heights codec roundtrip ok:', codecOk);
 console.log('save before:', beforeSave, ' continue visible:', continueVisible);
@@ -735,12 +798,20 @@ if (renderStats.triangles < 1000) {
   console.error('\n❌ canvas looks blank (almost no triangles rendered)');
   process.exit(1);
 }
-if (entityCount < 6) {
-  console.error('\n❌ dinosaurs were not placed');
+if (entityCount < 17 || dinosaurState.species.length < 14) {
+  console.error('\n❌ dinosaurs were not placed (15 species expected)');
   process.exit(1);
 }
-if (!splashHidden || toolCount !== 11 || topCount !== 7) {
+if (!splashHidden || toolCount !== 19 || topCount !== 7) {
   console.error('\n❌ UI not wired correctly');
+  process.exit(1);
+}
+if (!mosasaurState.exists || !mosasaurState.water || !mosasaurState.swimming || !mosasaurState.nearSurface) {
+  console.error('\n❌ mosasaurus swimming behavior wrong', mosasaurState);
+  process.exit(1);
+}
+if (migrated.v !== 2 || migrated.hatched !== 2 || migrated.raisedHerb !== 1 || migrated.raisedCarn !== 1 || migrated.stars !== 4) {
+  console.error('\n❌ profile v1 → v2 migration backfill wrong', migrated);
   process.exit(1);
 }
 if (
@@ -795,7 +866,7 @@ if (!pediaUnlock.raptorSeen || !pediaUnlock.toastShown || !pediaUnlock.badgeOn) 
   console.error('\n❌ pedia unlock (seen/toast/badge) failed');
   process.exit(1);
 }
-if (!pediaModal.visible || pediaModal.cards !== 7 || pediaModal.locked !== 6 || !pediaModal.badgeCleared) {
+if (!pediaModal.visible || pediaModal.cards !== 15 || pediaModal.locked !== 14 || !pediaModal.badgeCleared) {
   console.error('\n❌ pedia modal cards/silhouettes/badge state wrong');
   process.exit(1);
 }
@@ -861,7 +932,12 @@ if (finalTriangles < 1000) {
   console.error('\n❌ rendering broken after world events');
   process.exit(1);
 }
-const EXPECTED_CATS = ['earth', 'earth', 'plant', 'plant', 'herb', 'herb', 'herb', 'carn', 'carn', 'special', 'special'];
+const EXPECTED_CATS = [
+  'earth', 'earth', 'plant', 'plant',
+  'herb', 'herb', 'herb', 'herb', 'herb', 'herb', 'herb', 'herb',
+  'carn', 'carn', 'carn', 'carn',
+  'special', 'special', 'special',
+];
 if (JSON.stringify(tutStart.dataCats) !== JSON.stringify(EXPECTED_CATS)) {
   console.error('\n❌ toolbar data-cat attributes wrong');
   process.exit(1);

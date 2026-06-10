@@ -9,6 +9,14 @@ export const EGG_STYLES = {
   raptor: { shell: '#dfcbff', spot: '#805bb8', pattern: 'claw' },
   oviraptor: { shell: '#ffe28b', spot: '#df7d37', pattern: 'crest' },
   pterosaur: { shell: '#bfe7ff', spot: '#4d91c0', pattern: 'wings' },
+  ankylosaurus: { shell: '#e6e9c2', spot: '#7d9450', pattern: 'plates' },
+  parasaurolophus: { shell: '#c9ecf2', spot: '#3f95a8', pattern: 'crest' },
+  pachycephalosaurus: { shell: '#f5dcea', spot: '#a8628d', pattern: 'dome' },
+  dilophosaurus: { shell: '#d2ecc8', spot: '#4f8c4a', pattern: 'horns' },
+  diplodocus: { shell: '#dbe5f7', spot: '#5f7fb8', pattern: 'neck' },
+  spinosaurus: { shell: '#cfe3f0', spot: '#3a76a0', pattern: 'plates' },
+  therizinosaurus: { shell: '#eef2cf', spot: '#84994f', pattern: 'claw' },
+  mosasaurus: { shell: '#c2e2f7', spot: '#3a66a8', pattern: 'wings' },
 };
 // 星星里程碑（egg.golden）解锁后的华丽蛋配色：金色 / 星斑 / 彩虹斑——纯颜色数据零资产
 const FANCY_EGG_STYLES = [
