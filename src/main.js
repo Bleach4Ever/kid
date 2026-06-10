@@ -29,9 +29,53 @@ import { LIMITS, SEA_LEVEL } from './constants.js';
 initLang();
 applyDom(document.body);
 
+// ---------------- 健壮性：WebGL 检测 + 全局错误边界 ----------------
+function webglSupported() {
+  try {
+    const probe = document.createElement('canvas');
+    return !!(probe.getContext('webgl2') || probe.getContext('webgl'));
+  } catch {
+    return false;
+  }
+}
+
+if (!webglSupported()) {
+  document.getElementById('webgl-fallback').classList.add('visible');
+  document.getElementById('splash').classList.add('hidden');
+  // 模块顶层不能 return：用 throw 中止后续装配（错误边界尚未注册，不会叠加哎呀层）
+  throw new Error('WebGL not supported');
+}
+
+// 仅首次触发：先抢救存档，再显示大「哎呀！」。报错即存档 → 重载即恢复，对孩子近乎无感
+let fatalShown = false;
+function showFatalError() {
+  if (fatalShown) return;
+  fatalShown = true;
+  try {
+    saveWorld(); // 函数声明提升，这里可以安全引用
+  } catch { /* 存档失败也要把提示画出来 */ }
+  document.getElementById('error-overlay').classList.add('visible');
+}
+window.addEventListener('error', showFatalError);
+window.addEventListener('unhandledrejection', showFatalError);
+
 // ---------------- 装配世界 ----------------
 const canvas = document.getElementById('scene');
 const stage = new Stage(canvas);
+
+// 上下文丢失：先存档再暂停主循环（rAF 保持，恢复后无缝继续）
+let paused = false;
+const contextOverlay = document.getElementById('context-overlay');
+stage.onContextLost = () => {
+  saveWorld();
+  paused = true;
+  contextOverlay.classList.add('visible');
+};
+stage.onContextRestored = () => {
+  contextOverlay.classList.remove('visible');
+  paused = false;
+};
+
 const terrain = new Terrain();
 stage.scene.add(terrain.mesh);
 const water = new Water();
@@ -480,18 +524,21 @@ const ctx = {
 const clock = new THREE.Clock();
 
 function loop() {
-  const dt = Math.min(clock.getDelta(), 0.05);
-  ctx.time += dt;
-  input.update();
-  water.update(ctx.time);
-  sky.update(dt, ctx.time);
-  weather.update(dt);
-  worldEvents.update(dt);
-  particles.update(dt);
-  for (const e of entities) e.update(dt, ctx);
-  flushRemovals();
-  quality.noteFrame(dt); // auto 档持续卡顿 → 静默降级
-  stage.render();
+  // 上下文丢失期间跳过整帧（含渲染），rAF 不断 → restored 后下一帧自动继续
+  if (!paused) {
+    const dt = Math.min(clock.getDelta(), 0.05);
+    ctx.time += dt;
+    input.update();
+    water.update(ctx.time);
+    sky.update(dt, ctx.time);
+    weather.update(dt);
+    worldEvents.update(dt);
+    particles.update(dt);
+    for (const e of entities) e.update(dt, ctx);
+    flushRemovals();
+    quality.noteFrame(dt); // auto 档持续卡顿 → 静默降级
+    stage.render();
+  }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
@@ -525,3 +572,22 @@ window.__world = {
   lastPet: 0, // 调试计数：冒烟测试验证“点恐龙=抚摸”
 };
 bus.on('pet', () => { window.__world.lastPet++; });
+
+// ---------------- 装配完成：启用开始按钮（开始页本身就是加载屏） ----------------
+const startBtn = document.getElementById('start-btn');
+startBtn.dataset.i18n = 'splash.start';
+startBtn.textContent = t('splash.start');
+startBtn.disabled = false;
+
+// ---------------- PWA：手动注册 Service Worker（injectRegister: false） ----------------
+// itch.io 沙盒 iframe 里注册可能直接抛 SecurityError，必须静默失败；
+// 只在生产构建注册，避免 dev 下 404 噪音
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  const registerSW = () => {
+    try {
+      navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {});
+    } catch { /* 沙盒环境：静默放弃离线能力 */ }
+  };
+  if (document.readyState === 'complete') registerSW();
+  else window.addEventListener('load', registerSW);
+}

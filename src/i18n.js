@@ -56,6 +56,13 @@ const DICTS = {
     'population.count': '🦕 恐龙 {n} / {max}',
     'quest.title': '小任务',
     'quest.stars': '我的星星',
+    'splash.loading': '载入中…',
+    'fallback.title': '打不开 3D 小世界',
+    'fallback.body': '这台设备暂时不支持 3D。请换一个新一点的浏览器（比如 Chrome）再来玩吧！',
+    'error.title': '哎呀！',
+    'error.body': '小世界遇到了一点小麻烦。别担心，你的世界已经保存好啦！',
+    'error.reload': '重新开始 ▶',
+    'context.restoring': '正在恢复…',
   },
   en: {
     'title': 'My Little World',
@@ -111,6 +118,13 @@ const DICTS = {
     'population.count': '🦕 Dinos {n} / {max}',
     'quest.title': 'Little Quests',
     'quest.stars': 'My Stars',
+    'splash.loading': 'Loading…',
+    'fallback.title': "Can't open the 3D world",
+    'fallback.body': 'This device does not support 3D yet. Please try a newer browser like Chrome!',
+    'error.title': 'Oops!',
+    'error.body': "We hit a tiny bump. Don't worry — your world is safely saved!",
+    'error.reload': 'Start Again ▶',
+    'context.restoring': 'Coming back…',
   },
 };
 

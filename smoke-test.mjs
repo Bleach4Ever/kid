@@ -571,6 +571,71 @@ const capTest = await page.evaluate(() => {
   };
 });
 
+// ---------------- 阶段 9：健壮性 + PWA（刻意制造错误的段落必须放在最后） ----------------
+// 此前的完整流程必须零报错；从这里开始的错误是测试自己制造的
+const cleanConsoleErrors = consoleErrors.length;
+const cleanPageErrors = pageErrors.length;
+
+// 开始按钮：原始 HTML 里静态 disabled +「载入中…」，JS 装配完毕后启用
+const startBtnBoundary = await page.evaluate(async () => {
+  const raw = await (await fetch(location.href)).text();
+  return {
+    staticDisabled: /<button id="start-btn"[^>]*\sdisabled[\s>]/.test(raw),
+    staticLoading: raw.includes('载入中'),
+    enabledNow: !document.getElementById('start-btn').disabled,
+  };
+});
+
+// PWA：manifest 可访问且字段正确；preview(localhost) 下 SW 注册成功
+const pwaState = await page.evaluate(async () => {
+  const res = { manifestOk: false, swRegistered: false };
+  try {
+    const link = document.querySelector('link[rel="manifest"]');
+    const m = await (await fetch(link.href)).json();
+    res.manifestOk = m.short_name === '恐龙岛' && m.display === 'fullscreen' && m.icons.length === 3;
+  } catch { /* res.manifestOk 保持 false */ }
+  try {
+    for (let i = 0; i < 20 && !res.swRegistered; i++) {
+      res.swRegistered = !!(await navigator.serviceWorker.getRegistration());
+      if (!res.swRegistered) await new Promise((r) => setTimeout(r, 250));
+    }
+  } catch { /* res.swRegistered 保持 false */ }
+  return res;
+});
+
+// WebGL 上下文丢失 → 「正在恢复…」遮罩 + 主循环暂停；恢复 → 遮罩消失 + 继续渲染
+const ctxExtOk = await page.evaluate(() => {
+  const w = window.__world;
+  w.__loseCtx = w.stage.renderer.getContext().getExtension('WEBGL_lose_context');
+  if (!w.__loseCtx) return false;
+  localStorage.removeItem('dino-world:save'); // 清掉存档：证明是 lost 回调救回来的
+  w.__loseCtx.loseContext();
+  return true;
+});
+await page.waitForTimeout(600);
+const ctxLostState = await page.evaluate(() => ({
+  overlayVisible: document.getElementById('context-overlay').classList.contains('visible'),
+  hasSave: !!localStorage.getItem('dino-world:save'),
+}));
+await page.evaluate(() => window.__world.__loseCtx.restoreContext());
+await page.waitForTimeout(1500);
+const ctxRestoredState = await page.evaluate(() => ({
+  overlayHidden: !document.getElementById('context-overlay').classList.contains('visible'),
+  triangles: window.__world.stage.renderer.info.render.triangles,
+}));
+
+// 错误边界：未捕获异常 → 先抢救存档，再显示大「哎呀！」（页面状态从此变脏）
+const boundaryErrorsBefore = pageErrors.length;
+await page.evaluate(() => {
+  localStorage.removeItem('dino-world:save'); // 清掉存档：证明是错误边界救回来的
+  setTimeout(() => { throw new Error('test-boundary'); }, 0);
+});
+await page.waitForTimeout(600);
+const boundaryState = await page.evaluate(() => ({
+  overlayVisible: document.getElementById('error-overlay').classList.contains('visible'),
+  savedByBoundary: !!localStorage.getItem('dino-world:save'),
+}));
+
 await browser.close();
 
 console.log('canvas:', `${Math.round(canvasBox.width)}x${Math.round(canvasBox.height)}`);
@@ -610,11 +675,47 @@ console.log('volume sliders -> 0:', volumeState);
 console.log('quality low:', lowQuality);
 console.log('tree shared geometry:', treeShared, ' draw calls:', callsBefore, '->', callsAfter);
 console.log('dino cap stress:', capTest);
+console.log('start button boundary:', startBtnBoundary);
+console.log('pwa:', pwaState);
+console.log('context loss:', { ctxExtOk, ...ctxLostState }, '-> restore:', ctxRestoredState);
+console.log('error boundary:', boundaryState);
 console.log('console errors:', consoleErrors.length, consoleErrors.slice(0, 8));
 console.log('page errors:', pageErrors.length, pageErrors.slice(0, 8));
 
-if (pageErrors.length || consoleErrors.length) {
-  console.error('\n❌ SMOKE TEST FAILED');
+// 阶段 9 之前的完整流程必须零报错
+if (cleanPageErrors || cleanConsoleErrors) {
+  console.error('\n❌ SMOKE TEST FAILED (errors before the deliberate-error section)');
+  process.exit(1);
+}
+// 阶段 9 段落的预期噪音：上下文丢失的 CONTEXT_LOST 提示 + 我们自己抛的 test-boundary
+const unexpectedConsole = consoleErrors.filter((t) => !/context.?lost|test-boundary/i.test(t));
+const unexpectedPage = pageErrors.filter((t) => !/test-boundary/.test(t));
+if (unexpectedConsole.length || unexpectedPage.length) {
+  console.error('\n❌ unexpected errors during the phase-9 section', { unexpectedConsole, unexpectedPage });
+  process.exit(1);
+}
+if (pageErrors.length - boundaryErrorsBefore !== 1) {
+  console.error('\n❌ deliberate throw should surface exactly one pageerror');
+  process.exit(1);
+}
+if (!startBtnBoundary.staticDisabled || !startBtnBoundary.staticLoading || !startBtnBoundary.enabledNow) {
+  console.error('\n❌ start button should be statically disabled (载入中…) and enabled by JS');
+  process.exit(1);
+}
+if (!pwaState.manifestOk || !pwaState.swRegistered) {
+  console.error('\n❌ PWA manifest/service worker not working on preview');
+  process.exit(1);
+}
+if (!ctxExtOk || !ctxLostState.overlayVisible || !ctxLostState.hasSave) {
+  console.error('\n❌ context loss did not save + show the restoring overlay');
+  process.exit(1);
+}
+if (!ctxRestoredState.overlayHidden || ctxRestoredState.triangles < 1000) {
+  console.error('\n❌ context restore did not hide overlay / resume rendering');
+  process.exit(1);
+}
+if (!boundaryState.overlayVisible || !boundaryState.savedByBoundary) {
+  console.error('\n❌ error boundary did not save the world + show the oops overlay');
   process.exit(1);
 }
 if (renderStats.triangles < 1000) {

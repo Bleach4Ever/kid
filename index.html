@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#bfe3ff" />
+    <link rel="apple-touch-icon" href="./icon-192.png" />
     <title>我的小世界</title>
   </head>
   <body>
@@ -97,7 +98,32 @@
             <small data-i18n="preset.blank.desc">宽阔空岛，全部自己创造</small>
           </button>
         </div>
-        <button id="start-btn" data-i18n="splash.start">开 始 玩 ▶</button>
+        <!-- 静态 disabled + 载入中：开始页本身就是加载屏，main.js 装配完毕后启用 -->
+        <button id="start-btn" disabled data-i18n="splash.loading">载入中…</button>
+      </div>
+    </div>
+
+    <!-- 健壮性遮罩（默认隐藏；中文静态文案保证 JS 完全没加载时也可读） -->
+    <div id="webgl-fallback" class="boundary-overlay">
+      <div class="boundary-card">
+        <div class="boundary-emoji">🦕💤</div>
+        <h2 data-i18n="fallback.title">打不开 3D 小世界</h2>
+        <p data-i18n="fallback.body">这台设备暂时不支持 3D。请换一个新一点的浏览器（比如 Chrome）再来玩吧！</p>
+      </div>
+    </div>
+    <div id="error-overlay" class="boundary-overlay">
+      <div class="boundary-card">
+        <div class="boundary-emoji">🙈</div>
+        <h2 data-i18n="error.title">哎呀！</h2>
+        <p data-i18n="error.body">小世界遇到了一点小麻烦。别担心，你的世界已经保存好啦！</p>
+        <!-- 内联 onclick：错误边界出现时 JS 状态不可信，重载必须零依赖可用 -->
+        <button class="boundary-reload" onclick="location.reload()" data-i18n="error.reload">重新开始 ▶</button>
+      </div>
+    </div>
+    <div id="context-overlay" class="boundary-overlay">
+      <div class="boundary-card">
+        <div class="boundary-emoji">🪄</div>
+        <h2 data-i18n="context.restoring">正在恢复…</h2>
       </div>
     </div>
 

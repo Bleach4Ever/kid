@@ -1328,3 +1328,80 @@ body {
     opacity: 0.5;
   }
 }
+
+/* ---------------- 阶段 9：健壮性遮罩（WebGL 不支持 / 错误边界 / 上下文恢复） ---------------- */
+#start-btn:disabled {
+  cursor: wait;
+  filter: grayscale(0.55);
+  opacity: 0.75;
+}
+
+.boundary-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200; /* 盖住包括开始页(50)在内的一切 UI */
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: linear-gradient(#8fd0ff 0%, #cdeffb 55%, #fff3d6 100%);
+}
+
+.boundary-overlay.visible {
+  display: flex;
+}
+
+/* 上下文恢复提示用半透明：世界还在底下，只是睡了一小会儿 */
+#context-overlay {
+  background: rgba(205, 239, 251, 0.82);
+}
+
+.boundary-card {
+  max-width: 420px;
+  padding: 28px 30px 30px;
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 0 #e3d4ef, 0 18px 40px var(--shadow);
+  text-align: center;
+  color: var(--ink);
+  font-family: var(--font-candy);
+}
+
+.boundary-emoji {
+  font-size: 52px;
+  line-height: 1.2;
+}
+
+.boundary-card h2 {
+  margin: 10px 0 8px;
+  font-size: 30px;
+  color: #ff7aa8;
+  text-shadow:
+    -2px -2px 0 #fff, 2px -2px 0 #fff, -2px 2px 0 #fff, 2px 2px 0 #fff,
+    0 5px 0 rgba(255, 122, 168, 0.3);
+}
+
+.boundary-card p {
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.boundary-reload {
+  margin-top: 18px;
+  font-family: inherit;
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  border: none;
+  border-radius: 26px;
+  padding: 13px 34px;
+  background: linear-gradient(#8ade8f, #45b465);
+  box-shadow: 0 6px 0 #2f8d4c, 0 8px 16px var(--shadow);
+  cursor: pointer;
+  letter-spacing: 2px;
+}
+
+.boundary-reload:active {
+  transform: translateY(3px);
+  box-shadow: 0 3px 0 #2f8d4c;
+}

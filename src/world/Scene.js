@@ -16,6 +16,16 @@ export class Stage {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
 
+    // WebGL 上下文丢失/恢复（main.js 设置回调：存档+暂停 / 恢复主循环）。
+    // 必须 preventDefault()，否则浏览器认定页面不关心，restored 永远不会派发
+    this.onContextLost = null;
+    this.onContextRestored = null;
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.onContextLost?.();
+    });
+    canvas.addEventListener('webglcontextrestored', () => this.onContextRestored?.());
+
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color('#cdeffb');
     this.scene.fog = new THREE.Fog('#cdeffb', 55, 130);
