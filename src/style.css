@@ -201,6 +201,29 @@ body {
   pointer-events: none;
 }
 
+.lang-btn {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top));
+  left: 14px;
+  border: none;
+  border-radius: 18px;
+  padding: 10px 16px;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 4px 0 #e3d4ef, 0 6px 14px var(--shadow);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.lang-btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #e3d4ef, 0 3px 8px var(--shadow);
+}
+
 .splash-card {
   text-align: center;
   width: min(760px, 94vw);

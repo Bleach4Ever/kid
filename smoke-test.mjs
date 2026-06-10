@@ -9,7 +9,8 @@ const pageErrors = [];
 const browser = await chromium.launch({
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'],
 });
-const page = await browser.newPage({ viewport: { width: 1000, height: 700 } });
+// 固定中文 locale：保证初始语言为 zh，切到 en 再 reload 才能真正验证持久化
+const page = await browser.newPage({ viewport: { width: 1000, height: 700 }, locale: 'zh-CN' });
 
 page.on('console', (m) => {
   if (m.type() === 'error') consoleErrors.push(m.text());
@@ -100,6 +101,37 @@ const dinosaurState = await page.evaluate(() => {
 
 await page.screenshot({ path: 'smoke.png' });
 
+// i18n：切到英文 → 工具栏标签/标题立即变化
+const i18nState = await page.evaluate(() => {
+  window.__world.i18n.setLang('en');
+  return {
+    firstLabel: document.querySelector('#toolbar .tool-btn .label').textContent,
+    title: document.title,
+    lang: window.__world.i18n.getLang(),
+  };
+});
+
+// 高度图编解码：Float32 → Int16 厘米 → base64 往返（厘米精度内一致）
+const codecOk = await page.evaluate(() => {
+  const { encodeHeightsI16, decodeHeightsI16 } = window.__world.codec;
+  const src = new Float32Array(29241);
+  for (let i = 0; i < src.length; i++) src[i] = Math.sin(i * 0.37) * 20 - 5;
+  const out = decodeHeightsI16(encodeHeightsI16(src));
+  if (out.length !== src.length) return false;
+  for (let i = 0; i < src.length; i++) {
+    if (Math.abs(out[i] - src[i]) > 0.006) return false;
+  }
+  return true;
+});
+
+// reload 后语言持久（localStorage）
+await page.reload({ waitUntil: 'networkidle' });
+const i18nAfterReload = await page.evaluate(() => ({
+  title: document.title,
+  lang: window.__world.i18n.getLang(),
+  splashTitle: document.querySelector('.splash-card h1').textContent,
+}));
+
 await browser.close();
 
 console.log('canvas:', `${Math.round(canvasBox.width)}x${Math.round(canvasBox.height)}`);
@@ -109,6 +141,8 @@ console.log('render triangles:', renderStats.triangles, ' draw calls:', renderSt
 console.log('entities placed:', entityCount);
 console.log('herbivore feeding:', herbivoreBefore, '->', herbivoreAfter);
 console.log('dinosaur state:', dinosaurState);
+console.log('i18n switch:', i18nState, ' after reload:', i18nAfterReload);
+console.log('heights codec roundtrip ok:', codecOk);
 console.log('console errors:', consoleErrors.length, consoleErrors.slice(0, 8));
 console.log('page errors:', pageErrors.length, pageErrors.slice(0, 8));
 
@@ -138,6 +172,18 @@ if (
 }
 if (dinosaurState.raptorAlive || !dinosaurState.pterosaurAlive) {
   console.error('\n❌ carnivore size filtering failed');
+  process.exit(1);
+}
+if (i18nState.firstLabel !== 'Mountain' || i18nState.title !== 'My Little World') {
+  console.error('\n❌ i18n language switch failed');
+  process.exit(1);
+}
+if (i18nAfterReload.lang !== 'en' || i18nAfterReload.title !== 'My Little World' || i18nAfterReload.splashTitle !== 'My Little World') {
+  console.error('\n❌ i18n language did not persist across reload');
+  process.exit(1);
+}
+if (!codecOk) {
+  console.error('\n❌ heightmap Int16 codec roundtrip failed');
   process.exit(1);
 }
 console.log('\n✅ SMOKE TEST PASSED');

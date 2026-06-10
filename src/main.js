@@ -9,10 +9,16 @@ import { Input } from './systems/Input.js';
 import { Weather } from './systems/Weather.js';
 import { Audio } from './systems/Audio.js';
 import { Toolbar } from './ui/Toolbar.js';
+import { encodeHeightsI16, decodeHeightsI16 } from './systems/Storage.js';
+import { initLang, t, setLang, getLang, onLangChange, applyDom } from './i18n.js';
 import { createTree, createFlower } from './entities/Tree.js';
 import { createDinosaur } from './entities/Dinosaur.js';
 import { createEgg, createNest as createNestEntity, createPoop } from './entities/Ecosystem.js';
 import { LIMITS, SEA_LEVEL } from './constants.js';
+
+// ---------------- 语言（先于一切 UI） ----------------
+initLang();
+applyDom(document.body);
 
 // ---------------- 装配世界 ----------------
 const canvas = document.getElementById('scene');
@@ -104,7 +110,7 @@ function addEntity(wrapper, pos) {
 function updatePopulationStatus() {
   if (!populationStatus) return;
   const total = entities.reduce((sum, entity) => sum + (entity.isDinosaur && entity.alive ? 1 : 0), 0);
-  populationStatus.textContent = `🦕 恐龙 ${total} / 100`;
+  populationStatus.textContent = t('population.count', { n: total, max: 100 });
   populationStatus.classList.toggle('warning', total >= 80 && total < 100);
   populationStatus.classList.toggle('danger', total >= 100);
 }
@@ -253,6 +259,14 @@ for (const card of document.querySelectorAll('.preset-card')) {
 }
 applyWorldPreset(currentPreset);
 
+document.getElementById('lang-btn').addEventListener('click', () => {
+  setLang(getLang() === 'zh' ? 'en' : 'zh');
+});
+onLangChange(() => {
+  applyDom(document.body);
+  updatePopulationStatus();
+});
+
 document.getElementById('start-btn').addEventListener('click', () => {
   applyWorldPreset(currentPreset);
   audio.unlock();
@@ -298,4 +312,6 @@ window.__world = {
   createNest,
   layEgg,
   hatchEgg,
+  i18n: { t, setLang, getLang },
+  codec: { encodeHeightsI16, decodeHeightsI16 },
 };

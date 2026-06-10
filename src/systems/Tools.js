@@ -1,25 +1,25 @@
 // 工具定义与当前选中状态
 
-// 可选中的“神力”（底部工具栏）
+// 可选中的“神力”（底部工具栏）；label 是 i18n key，渲染时用 t() 解析
 export const TOOLS = [
-  { id: 'mountain', icon: '⛰️', label: '造山', type: 'sculpt', dir: 1 },
-  { id: 'ocean', icon: '🌊', label: '挖海', type: 'sculpt', dir: -1 },
-  { id: 'tree', icon: '🌳', label: '种树', type: 'place', kind: 'tree' },
-  { id: 'flower', icon: '🌷', label: '种花', type: 'place', kind: 'flower' },
-  { id: 'triceratops', icon: './icons/triceratops.svg', label: '三角龙', type: 'place', kind: 'triceratops' },
-  { id: 'brachiosaurus', icon: './icons/brachiosaurus.svg', label: '腕龙', type: 'place', kind: 'brachiosaurus' },
-  { id: 'stegosaurus', icon: './icons/stegosaurus.svg', label: '剑龙', type: 'place', kind: 'stegosaurus' },
-  { id: 'trex', icon: './icons/trex.svg', label: '霸王龙', type: 'place', kind: 'trex' },
-  { id: 'raptor', icon: './icons/raptor.svg', label: '迅猛龙', type: 'place', kind: 'raptor' },
-  { id: 'oviraptor', icon: './icons/oviraptor.svg', label: '窃蛋龙', type: 'place', kind: 'oviraptor' },
-  { id: 'pterosaur', icon: './icons/pterosaur.svg', label: '翼龙', type: 'place', kind: 'pterosaur' },
+  { id: 'mountain', icon: '⛰️', label: 'tool.mountain', type: 'sculpt', dir: 1 },
+  { id: 'ocean', icon: '🌊', label: 'tool.ocean', type: 'sculpt', dir: -1 },
+  { id: 'tree', icon: '🌳', label: 'tool.tree', type: 'place', kind: 'tree' },
+  { id: 'flower', icon: '🌷', label: 'tool.flower', type: 'place', kind: 'flower' },
+  { id: 'triceratops', icon: './icons/triceratops.svg', label: 'tool.triceratops', type: 'place', kind: 'triceratops' },
+  { id: 'brachiosaurus', icon: './icons/brachiosaurus.svg', label: 'tool.brachiosaurus', type: 'place', kind: 'brachiosaurus' },
+  { id: 'stegosaurus', icon: './icons/stegosaurus.svg', label: 'tool.stegosaurus', type: 'place', kind: 'stegosaurus' },
+  { id: 'trex', icon: './icons/trex.svg', label: 'tool.trex', type: 'place', kind: 'trex' },
+  { id: 'raptor', icon: './icons/raptor.svg', label: 'tool.raptor', type: 'place', kind: 'raptor' },
+  { id: 'oviraptor', icon: './icons/oviraptor.svg', label: 'tool.oviraptor', type: 'place', kind: 'oviraptor' },
+  { id: 'pterosaur', icon: './icons/pterosaur.svg', label: 'tool.pterosaur', type: 'place', kind: 'pterosaur' },
 ];
 
 // 点一下立刻触发的动作（顶部按钮）
 export const ACTIONS = [
-  { id: 'daynight', icon: '🌗', label: '白天黑夜' },
-  { id: 'rain', icon: '🌧️', label: '下雨' },
-  { id: 'rainbow', icon: '🌈', label: '彩虹' },
+  { id: 'daynight', icon: '🌗', label: 'action.daynight' },
+  { id: 'rain', icon: '🌧️', label: 'action.rain' },
+  { id: 'rainbow', icon: '🌈', label: 'action.rainbow' },
 ];
 
 export class Tools {
