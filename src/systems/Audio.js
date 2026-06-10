@@ -3,6 +3,33 @@
 
 const PENTA = [261.63, 293.66, 329.63, 392.0, 440.0, 523.25, 587.33, 659.25]; // C 大调五声音阶
 
+// BGM 情绪：白天明快 → 黄昏放慢限低音区 → 夜晚摇篮曲（降八度 + sine + 深根音垫）
+const MOODS = {
+  day: { step: 0.5, maxIdx: PENTA.length - 1, mult: 1, type: 'triangle', peak: 0.1, prob: 0.78, pad: 0.5 },
+  sunset: { step: 0.65, maxIdx: 4, mult: 1, type: 'triangle', peak: 0.07, prob: 0.68, pad: 0.5 },
+  night: { step: 0.9, maxIdx: 4, mult: 0.5, type: 'sine', peak: 0.06, prob: 0.5, pad: 0.25 },
+};
+
+// 7 物种叫声配方
+const CRIES = {
+  trex: (a) => a._tone(130, 0.45, { type: 'triangle', peak: 0.16, slideTo: 75 }),
+  brachiosaurus: (a) => {
+    a._tone(200, 0.28, { type: 'sine', peak: 0.13, slideTo: 330 });
+    a._tone(330, 0.32, { type: 'sine', peak: 0.11, when: 0.3, slideTo: 260 });
+  },
+  triceratops: (a) => a._tone(240, 0.35, { type: 'square', peak: 0.07, slideTo: 180 }),
+  stegosaurus: (a) => {
+    a._tone(320, 0.18, { type: 'triangle', peak: 0.12, slideTo: 260 });
+    a._tone(260, 0.22, { type: 'triangle', peak: 0.1, when: 0.2, slideTo: 290 });
+  },
+  raptor: (a) => {
+    a._tone(700, 0.12, { type: 'sine', peak: 0.12, slideTo: 1100 });
+    a._tone(700, 0.12, { type: 'sine', peak: 0.1, when: 0.16, slideTo: 1100 });
+  },
+  oviraptor: (a) => a._tone(600, 0.16, { type: 'sawtooth', peak: 0.05, slideTo: 900 }),
+  pterosaur: (a) => a._tone(1100, 0.5, { type: 'sawtooth', peak: 0.04, slideTo: 1600, echo: true }),
+};
+
 export class Audio {
   constructor() {
     this.ctx = null;
@@ -10,6 +37,19 @@ export class Audio {
     this._lastDig = 0;
     this._lastCry = 0;
     this.rainNode = null;
+    this.mood = MOODS.day;
+    // 切后台暂停一切声音与调度，回来再恢复（避免堆积的 interval 重复调度）
+    document.addEventListener('visibilitychange', () => {
+      if (!this.ctx) return;
+      if (document.visibilityState === 'hidden') {
+        this.ctx.suspend();
+        clearInterval(this._sched);
+        this._sched = null;
+      } else {
+        this.ctx.resume();
+        this._startBgm();
+      }
+    });
   }
 
   unlock() {
@@ -105,26 +145,32 @@ export class Audio {
     if (!this.ctx) return;
     while (this.nextNote < this.ctx.currentTime + 0.25) {
       this._melodyNote(this.nextNote, this.step);
-      this.nextNote += 0.5;
+      this.nextNote += this.mood.step;
       this.step++;
     }
   }
 
+  setMood(phase) {
+    this.mood = MOODS[phase] || MOODS.day;
+  }
+
   _melodyNote(time, step) {
+    const m = this.mood;
     // 随机游走的旋律
-    if (Math.random() < 0.78) {
+    if (Math.random() < m.prob) {
       this.mi += [-2, -1, -1, 1, 1, 2][(Math.random() * 6) | 0];
-      this.mi = Math.max(0, Math.min(PENTA.length - 1, this.mi));
-      this._tone(PENTA[this.mi], 0.45, {
-        type: 'triangle', peak: 0.1, when: time - this.ctx.currentTime,
+      this.mi = Math.max(0, Math.min(m.maxIdx, this.mi));
+      this._tone(PENTA[this.mi] * m.mult, m.step * 0.9, {
+        type: m.type, peak: m.peak, when: time - this.ctx.currentTime,
         dest: this.musicGain, echo: true,
       });
     }
     // 每 8 拍来一个柔和的低音和弦垫底
     if (step % 8 === 0) {
-      const root = PENTA[0] / 2;
-      this._tone(root, 1.8, { type: 'sine', peak: 0.09, when: time - this.ctx.currentTime, dest: this.musicGain });
-      this._tone(root * 1.5, 1.8, { type: 'sine', peak: 0.06, when: time - this.ctx.currentTime, dest: this.musicGain });
+      const root = PENTA[0] * m.pad;
+      const dur = m.step * 3.6;
+      this._tone(root, dur, { type: 'sine', peak: 0.09, when: time - this.ctx.currentTime, dest: this.musicGain });
+      this._tone(root * 1.5, dur, { type: 'sine', peak: 0.06, when: time - this.ctx.currentTime, dest: this.musicGain });
     }
   }
 
@@ -170,6 +216,37 @@ export class Audio {
   playDinosaur() {
     if (!this._cryOk()) return;
     this._tone(180, 0.22, { type: 'triangle', peak: 0.13, slideTo: 115 });
+  }
+
+  // 物种专属叫声（配方表驱动），未知物种回落到通用叫声
+  playCry(species) {
+    if (!this._cryOk()) return;
+    const cry = CRIES[species];
+    if (cry) cry(this);
+    else this._tone(180, 0.22, { type: 'triangle', peak: 0.13, slideTo: 115 });
+  }
+
+  // 孵化：噪声“咔哒”破壳 + 上行三连音 + 高音铃
+  playHatch() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this._noiseBuffer();
+    const hp = this.ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 1800;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.2, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    src.connect(hp);
+    hp.connect(g);
+    g.connect(this.sfxGain);
+    src.start(t);
+    src.stop(t + 0.15);
+    [392, 523.25, 659.25].forEach((f, i) =>
+      this._tone(f, 0.22, { type: 'triangle', peak: 0.12, when: 0.1 + i * 0.09, echo: true })
+    );
+    this._tone(1318.5, 0.4, { type: 'sine', peak: 0.07, when: 0.38, echo: true });
   }
 
   playEat() {

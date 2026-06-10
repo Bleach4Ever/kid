@@ -5,6 +5,8 @@ import { clamp, easeOutBack, lerp, TAU } from '../utils.js';
 const BOUND = WORLD_SIZE * 0.46;
 const eyeMat = new THREE.MeshStandardMaterial({ color: '#30283a', roughness: 0.7 });
 const toothMat = new THREE.MeshStandardMaterial({ color: '#fff8df', flatShading: true });
+const zzzMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85, depthTest: false });
+const HEART_COLORS = ['#ff6f9c', '#ff9ec4', '#ffd3e2'];
 
 const SPECIES = {
   triceratops: {
@@ -193,6 +195,20 @@ function addAlertMarker(group) {
   return marker;
 }
 
+// 睡觉时 3 个小白球循环飘升的 💤 标记
+function addSleepMarker(group) {
+  const marker = new THREE.Group();
+  for (let i = 0; i < 3; i++) {
+    const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07 + i * 0.02, 1), zzzMat);
+    marker.add(ball);
+  }
+  marker.position.set(0.35, 2.3, 0.5);
+  marker.visible = false;
+  marker.renderOrder = 20;
+  group.add(marker);
+  return marker;
+}
+
 function buildModel(species, config) {
   const bodyMat = material(config.body);
   const accentMat = material(config.accent);
@@ -256,6 +272,7 @@ export function createDinosaur(species, saved = null) {
   const model = buildModel(species, config);
   const group = model.group;
   const alertMarker = addAlertMarker(group);
+  const sleepMarker = addSleepMarker(group);
   const wrapper = {
     object3d: group,
     kind: species,
@@ -288,15 +305,33 @@ export function createDinosaur(species, saved = null) {
   let layingTime = 0;
   const flightRadius = 8 + Math.random() * 13;
   const flightHeight = 6 + Math.random() * 5;
+  let wakeTimer = 0; // 被摸醒后多久内不再入睡
+  let callTimer = 10 + Math.random() * 15;
+  let nodTime = 0;
+  let emoteTime = -1;
+  let raisedEmitted = age >= 60; // 读档的成年龙不再重复发 raised
 
   function growthFactor() {
     return Math.max(0.65, lerp(0.65, 1, Math.min(1, age / 60)) + foodGrowth);
   }
 
-  function chooseLandTarget(terrain) {
+  function chooseLandTarget(ctx) {
+    // 结伴：35% 概率去同物种伙伴附近 → 自然成群
+    if (Math.random() < 0.35) {
+      const friends = ctx.entities.filter((e) =>
+        e !== wrapper && e.isDinosaur && e.alive && !e.consumed && !e.flying && e.species === species
+      );
+      if (friends.length) {
+        const buddy = friends[(Math.random() * friends.length) | 0];
+        const offset = diskTarget(3);
+        const x = clamp(buddy.object3d.position.x + offset.x, -BOUND, BOUND);
+        const z = clamp(buddy.object3d.position.z + offset.z, -BOUND, BOUND);
+        if (ctx.terrain.getHeightAt(x, z) > SEA_LEVEL + 0.15) return { x, z };
+      }
+    }
     for (let i = 0; i < 8; i++) {
       const candidate = diskTarget();
-      if (terrain.getHeightAt(candidate.x, candidate.z) > SEA_LEVEL + 0.15) return candidate;
+      if (ctx.terrain.getHeightAt(candidate.x, candidate.z) > SEA_LEVEL + 0.15) return candidate;
     }
     return diskTarget(BOUND * 0.75);
   }
@@ -396,19 +431,76 @@ export function createDinosaur(species, saved = null) {
     return true;
   }
 
+  // 开心 emote：0.9s 抛物线跳 + 落地压缩拉伸 + 爱心粒子
+  wrapper.startEmote = (type, ctx) => {
+    if (emoteTime >= 0 || !wrapper.alive || wrapper.consumed || wrapper.flying) return;
+    emoteTime = 0;
+    if (ctx?.particles) {
+      const p = group.position;
+      ctx.particles.burst({ x: p.x, y: p.y + wrapper.size * 1.2, z: p.z }, {
+        count: 8, colors: HEART_COLORS, speed: 1.1, gravity: -1.4, life: 0.9, size: 0.2,
+      });
+    }
+  };
+
+  // 抚摸：永远开心（4 岁直觉），睡着的会被摸醒
+  wrapper.pet = (ctx) => {
+    if (!wrapper.alive || wrapper.consumed) return;
+    if (wrapper.lifeState === 'sleeping') {
+      wrapper.lifeState = 'wandering';
+      wakeTimer = 20;
+    }
+    wrapper.startEmote('pet', ctx);
+    ctx.audio.playCry(species);
+    ctx.bus.emit('pet', { species });
+  };
+
   wrapper.update = (dt, ctx) => {
     if (!wrapper.alive) return;
     age += dt;
+    if (!raisedEmitted && age >= 60) {
+      raisedEmitted = true;
+      ctx.bus.emit('raised', { species });
+    }
     wrapper.eggTimer = Math.max(0, wrapper.eggTimer - dt);
     const desiredScale = config.baseSize * growthFactor();
     wrapper.size = desiredScale;
     const intro = age < 0.45 ? Math.max(0.001, easeOutBack(age / 0.45)) : 1;
     visualScale += (desiredScale * intro - visualScale) * Math.min(1, dt * 5);
     group.scale.setScalar(visualScale);
+    sleepMarker.visible = false;
+
+    if (emoteTime >= 0) {
+      emoteTime += dt;
+      const t = Math.min(1, emoteTime / 0.9);
+      const hop = Math.sin(t * Math.PI);
+      const p = group.position;
+      p.y = Math.max(ctx.seaLevel, ctx.terrain.getHeightAt(p.x, p.z)) + hop * wrapper.size * 0.55;
+      // 起跳拉伸、落地压扁
+      const squash = t > 0.82 ? 1 - Math.sin(((t - 0.82) / 0.18) * Math.PI) * 0.2 : 1 + hop * 0.12;
+      const wide = 1 + (1 - squash) * 0.6;
+      group.scale.set(visualScale * wide, visualScale * squash, visualScale * wide);
+      if (t >= 1) emoteTime = -1;
+      return;
+    }
 
     if (updateReproduction(dt, ctx)) {
       alertMarker.visible = false;
       return;
+    }
+
+    // 闲时叫声 + 点头
+    callTimer -= dt;
+    if (callTimer <= 0) {
+      callTimer = 10 + Math.random() * 15;
+      if (wrapper.lifeState !== 'sleeping') {
+        ctx.audio.playCry(species);
+        nodTime = 0.6;
+      }
+    }
+    if (nodTime > 0) {
+      nodTime = Math.max(0, nodTime - dt);
+      group.rotation.x = -Math.sin((1 - nodTime / 0.6) * Math.PI) * 0.16;
     }
 
     if (wrapper.flying) {
@@ -421,6 +513,28 @@ export function createDinosaur(species, saved = null) {
       const flap = Math.sin(ctx.time * 8) * 0.65;
       model.wings[0].rotation.x = flap;
       model.wings[1].rotation.x = flap;
+      return;
+    }
+
+    // 睡觉：夜晚无目标就地入睡，呼吸起伏 + 💤；白天或被摸醒后恢复
+    wakeTimer = Math.max(0, wakeTimer - dt);
+    if (wrapper.lifeState === 'sleeping' && ctx.skyPhase !== 'night') {
+      wrapper.lifeState = 'wandering';
+    } else if (
+      wrapper.lifeState !== 'sleeping' &&
+      ctx.skyPhase === 'night' && !wrapper.target && wrapper.eggTimer > 5 && wakeTimer === 0
+    ) {
+      wrapper.lifeState = 'sleeping';
+    }
+    if (wrapper.lifeState === 'sleeping') {
+      alertMarker.visible = false;
+      sleepMarker.visible = true;
+      group.scale.y = visualScale * (1 + Math.sin(ctx.time * 1.6) * 0.03);
+      for (let i = 0; i < 3; i++) {
+        const k = (ctx.time * 0.4 + i / 3) % 1;
+        sleepMarker.children[i].position.set(Math.sin(k * TAU) * 0.14, k * 1.1, 0);
+        sleepMarker.children[i].scale.setScalar(0.5 + k);
+      }
       return;
     }
 
@@ -439,6 +553,14 @@ export function createDinosaur(species, saved = null) {
       const distance = moveToward(wrapper.target.object3d.position, dt, ctx.terrain, chaseSpeed);
       const eatDistance = Math.max(0.8, wrapper.size * 0.75);
       if (distance <= eatDistance && wrapper.target.consume?.(ctx.removeEntity)) {
+        const foodPos = wrapper.target.object3d.position;
+        ctx.particles.burst({ x: foodPos.x, y: foodPos.y + 0.6, z: foodPos.z }, {
+          count: 10,
+          colors: wrapper.diet === 'herbivore'
+            ? ['#79c96d', '#a4e08a', '#5ca85b']
+            : ['#e3a266', '#c98052', '#f2c98c'],
+          speed: 1.6, gravity: 5, life: 0.6, size: 0.14,
+        });
         foodGrowth += 0.05;
         wrapper.mealsEaten++;
         wrapper.hungerTimer = 12 + Math.random() * 8;
@@ -446,13 +568,15 @@ export function createDinosaur(species, saved = null) {
         alertMarker.visible = false;
         ctx.spawnPoop(wrapper);
         ctx.audio.playEat();
+        ctx.bus.emit('eat', { species, diet: wrapper.diet });
+        wrapper.startEmote('eat', ctx);
       }
       return;
     }
 
     wrapper.lifeState = 'wandering';
     if (Math.hypot(wanderTarget.x - group.position.x, wanderTarget.z - group.position.z) < 0.8) {
-      wanderTarget = chooseLandTarget(ctx.terrain);
+      wanderTarget = chooseLandTarget(ctx);
     }
     moveToward(wanderTarget, dt, ctx.terrain);
   };

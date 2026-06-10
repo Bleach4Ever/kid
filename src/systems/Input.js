@@ -5,7 +5,7 @@ import * as THREE from 'three';
 //   命中小岛/海面 + 当前是创造工具 → 工具接管这次拖拽（不转视角）
 //   点到天空 → 交给 OrbitControls 转视角
 export class Input {
-  constructor({ dom, camera, controls, terrain, water, tools, actions }) {
+  constructor({ dom, camera, controls, terrain, water, tools, actions, getPetTargets }) {
     this.dom = dom;
     this.camera = camera;
     this.controls = controls;
@@ -13,6 +13,7 @@ export class Input {
     this.water = water;
     this.tools = tools;
     this.actions = actions;
+    this.getPetTargets = getPetTargets || null;
 
     this.ray = new THREE.Raycaster();
     this.ndc = new THREE.Vector2();
@@ -29,17 +30,45 @@ export class Input {
     window.addEventListener('pointercancel', () => this._up());
   }
 
-  _raycast(cx, cy) {
+  _setRay(cx, cy) {
     const rect = this.dom.getBoundingClientRect();
     this.ndc.x = ((cx - rect.left) / rect.width) * 2 - 1;
     this.ndc.y = -((cy - rect.top) / rect.height) * 2 + 1;
     this.ray.setFromCamera(this.ndc, this.camera);
+  }
+
+  _raycast(cx, cy) {
+    this._setRay(cx, cy);
     const hits = this.ray.intersectObjects(this.targets, false);
     return hits.length ? hits[0] : null;
   }
 
+  // 命中可抚摸的恐龙时返回其 wrapper；被地形挡住（恐龙更远）则不算
+  _petHit(cx, cy) {
+    if (!this.getPetTargets) return null;
+    const targets = this.getPetTargets();
+    if (!targets.length) return null;
+    this._setRay(cx, cy);
+    const hits = this.ray.intersectObjects(targets, true);
+    if (!hits.length) return null;
+    const ground = this.ray.intersectObjects(this.targets, false);
+    if (ground.length && ground[0].distance < hits[0].distance) return null;
+    let obj = hits[0].object;
+    while (obj && !obj.userData.entity) obj = obj.parent;
+    return obj ? obj.userData.entity : null;
+  }
+
   _down(e) {
     if (e.target !== this.dom) return; // 点的是 UI 按钮，放行
+    // 点到恐龙永远是抚摸，无视当前工具
+    const petTarget = this._petHit(e.clientX, e.clientY);
+    if (petTarget) {
+      this.actions.pet(petTarget);
+      this.controls.enabled = false;
+      this.interacting = true;
+      this.activeTool = { type: 'pet' };
+      return;
+    }
     const tool = this.tools.current;
     if (!tool) return;
     const hit = this._raycast(e.clientX, e.clientY);

@@ -47,6 +47,15 @@ await page.waitForTimeout(300);
 await page.mouse.up();
 
 // 放置植物和全部恐龙（force 跳过被选中按钮的循环动画稳定性等待）
+// 阶段 3 起“点到恐龙=抚摸”，先把预设恐龙挪去角落、每次放完恐龙也挪开，
+// 保证后续点击落在地形上而不是变成抚摸
+await page.evaluate(() => {
+  for (const e of window.__world.entities) {
+    if (e.isDinosaur && !e.flying) {
+      e.object3d.position.set(-14 + Math.random() * 4, 0, -10 + Math.random() * 4);
+    }
+  }
+});
 const tools = [
   'mountain', 'ocean', 'tree', 'flower', 'triceratops',
   'brachiosaurus', 'stegosaurus', 'trex', 'raptor', 'oviraptor', 'pterosaur',
@@ -54,6 +63,11 @@ const tools = [
 for (const t of tools.slice(2)) {
   await page.locator('#toolbar .tool-btn').nth(tools.indexOf(t)).click({ force: true });
   await page.mouse.click(520, 380);
+  await page.evaluate(() => {
+    const w = window.__world;
+    const last = w.entities[w.entities.length - 1];
+    if (last?.isDinosaur && !last.flying) last.object3d.position.x -= 9;
+  });
   await page.waitForTimeout(80);
 }
 // 顶部：昼夜、下雨、彩虹
@@ -175,6 +189,59 @@ const corruptState = await page.evaluate(() => ({
   hasSave: window.__world.hasSave(),
 }));
 
+// ---------------- 阶段 3：夜晚睡觉 + 点击抚摸 ----------------
+await page.reload({ waitUntil: 'networkidle' });
+await page.locator('#start-btn').click();
+await page.waitForTimeout(400);
+// 切到夜晚（daynight ×2）
+for (let i = 0; i < 2; i++) {
+  await page.locator('#top-bar .tool-btn').nth(0).click({ force: true });
+  await page.waitForTimeout(150);
+}
+// 锁定饥饿/产蛋计时，让所有地面恐龙安静入睡
+await page.evaluate(() => {
+  for (const e of window.__world.entities) {
+    if (e.isDinosaur) {
+      e.hungerTimer = 999;
+      e.eggTimer = 999;
+      e.target = null;
+    }
+  }
+});
+await page.waitForTimeout(700);
+const sleepState = await page.evaluate(() => {
+  const w = window.__world;
+  const ground = w.entities.filter((e) => e.isDinosaur && e.alive && !e.flying);
+  return {
+    total: ground.length,
+    sleeping: ground.filter((e) => e.lifeState === 'sleeping').length,
+  };
+});
+
+// 把一只睡着的恐龙挪到岛中心，投影到屏幕坐标后点击 → 应记为抚摸
+const petTarget = await page.evaluate(() => {
+  const w = window.__world;
+  const dino = w.entities.find((e) => e.isDinosaur && e.alive && !e.flying);
+  dino.object3d.position.set(2, Math.max(0.1, w.terrain.getHeightAt(2, 2)), 2);
+  w.__petDino = dino;
+  const v = dino.object3d.position.clone();
+  v.y += dino.size * 0.7;
+  v.project(w.stage.camera);
+  const rect = w.stage.renderer.domElement.getBoundingClientRect();
+  return {
+    x: rect.left + (v.x * 0.5 + 0.5) * rect.width,
+    y: rect.top + (-v.y * 0.5 + 0.5) * rect.height,
+    lastPetBefore: w.lastPet,
+  };
+});
+await page.waitForTimeout(300); // 等一帧渲染，让挪动后的 matrixWorld 生效再点击
+await page.mouse.click(petTarget.x, petTarget.y);
+await page.waitForTimeout(250);
+const petResult = await page.evaluate(() => ({
+  lastPet: window.__world.lastPet,
+  petDinoAwake: window.__world.__petDino.lifeState !== 'sleeping',
+}));
+
 await browser.close();
 
 console.log('canvas:', `${Math.round(canvasBox.width)}x${Math.round(canvasBox.height)}`);
@@ -189,6 +256,8 @@ console.log('heights codec roundtrip ok:', codecOk);
 console.log('save before:', beforeSave, ' continue visible:', continueVisible);
 console.log('after restore:', afterRestore);
 console.log('corrupt save state:', corruptState);
+console.log('night sleep:', sleepState);
+console.log('pet click:', petTarget.lastPetBefore, '->', petResult);
 console.log('console errors:', consoleErrors.length, consoleErrors.slice(0, 8));
 console.log('page errors:', pageErrors.length, pageErrors.slice(0, 8));
 
@@ -246,6 +315,14 @@ if (JSON.stringify(afterRestore.species) !== JSON.stringify(beforeSave.species))
 }
 if (!corruptState.continueHidden || !corruptState.splashVisible || corruptState.hasSave) {
   console.error('\n❌ corrupt save was not silently discarded');
+  process.exit(1);
+}
+if (sleepState.sleeping === 0 || sleepState.total === 0) {
+  console.error('\n❌ no grounded dinosaur fell asleep at night');
+  process.exit(1);
+}
+if (petResult.lastPet <= petTarget.lastPetBefore) {
+  console.error('\n❌ clicking a dinosaur did not register a pet');
   process.exit(1);
 }
 console.log('\n✅ SMOKE TEST PASSED');

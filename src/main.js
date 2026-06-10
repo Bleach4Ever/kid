@@ -8,6 +8,8 @@ import { Tools } from './systems/Tools.js';
 import { Input } from './systems/Input.js';
 import { Weather } from './systems/Weather.js';
 import { Audio } from './systems/Audio.js';
+import { Bus } from './systems/Bus.js';
+import { Particles } from './systems/Particles.js';
 import { Toolbar } from './ui/Toolbar.js';
 import { encodeHeightsI16, decodeHeightsI16 } from './systems/Storage.js';
 import { loadSave, clearSave, serializeWorld, hasSave } from './systems/SaveGame.js';
@@ -32,6 +34,9 @@ const sky = new Sky(stage.scene, { sun: stage.sun, hemi: stage.hemi, ambient: st
 const audio = new Audio();
 const tools = new Tools();
 const weather = new Weather(stage.scene, terrain);
+const bus = new Bus();
+const particles = new Particles(stage.scene);
+const SKY_PHASES = ['day', 'sunset', 'night'];
 
 // ---------------- 实体管理（树/花/恐龙） ----------------
 const entities = [];
@@ -92,6 +97,7 @@ function flushRemovals() {
 }
 
 function addEntity(wrapper, pos) {
+  wrapper.object3d.userData.entity = wrapper; // 抚摸射线命中后反查 wrapper
   wrapper.object3d.position.copy(pos);
   stage.scene.add(wrapper.object3d);
   entities.push(wrapper);
@@ -123,11 +129,18 @@ function placeEntity(point, kind) {
     const w = kind === 'tree' ? createTree() : createFlower();
     addEntity(w, new THREE.Vector3(point.x, y, point.z));
     kind === 'tree' ? audio.playPlop() : audio.playSparkle();
+    particles.burst({ x: point.x, y: y + 0.5, z: point.z }, {
+      count: 10, colors: ['#8fdf7a', '#bce98c', '#6fc96b'], speed: 1.6, gravity: 4, life: 0.7, size: 0.16,
+    });
   } else {
     const w = createDinosaur(kind);
     addEntity(w, new THREE.Vector3(point.x, SEA_LEVEL, point.z));
-    audio.playDinosaur();
+    audio.playCry(kind);
+    particles.burst({ x: point.x, y: SEA_LEVEL + 0.8, z: point.z }, {
+      count: 14, colors: ['#ffd980', '#ffb45e', '#fff1b0'], speed: 2, gravity: 4, life: 0.8, size: 0.18,
+    });
   }
+  bus.emit('place', { kind });
 }
 
 function placePresetEntity(kind, x, z) {
@@ -181,8 +194,16 @@ function hatchEgg(egg) {
   const position = groundPosition(egg.object3d.position.x, egg.object3d.position.z);
   if (egg.nest?.egg === egg) egg.nest.egg = null;
   requestRemove(egg);
-  addEntity(createDinosaur(egg.species), position);
-  audio.playSparkle();
+  const baby = createDinosaur(egg.species);
+  addEntity(baby, position);
+  audio.playHatch();
+  // 彩纸庆祝 + 新生儿开心一跳
+  particles.burst({ x: position.x, y: position.y + 0.8, z: position.z }, {
+    count: 24, colors: ['#ff7d7d', '#ffd166', '#6ec6ff', '#9ef0a0', '#f7a8ff'],
+    speed: 2.6, gravity: 4.5, life: 1, size: 0.18,
+  });
+  baby.startEmote?.('hatch', ctx);
+  bus.emit('hatch', { species: egg.species });
 }
 
 function spawnPoop(dinosaur) {
@@ -246,6 +267,7 @@ function restoreWorld(save) {
   terrain.generate(currentPreset); // 兜底：高度数据异常时仍是完整预设地形
   if (save.heights) terrain.applyHeights(save.heights);
   sky.setIndex(save.skyIndex);
+  syncSkyPhase();
   for (const rec of save.entities) {
     if (rec.k === 'tree' || rec.k === 'flower') {
       placePresetEntity(rec.k, rec.x, rec.z);
@@ -264,12 +286,18 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('pagehide', saveWorld);
 
+let lastSculptEmit = -Infinity;
 const actions = {
   sculpt: (point, dir) => {
     terrain.sculpt(point, dir);
     audio.playDig(dir);
+    if (ctx.time - lastSculptEmit >= 1) { // 持续雕刻每帧触发，事件节流到 ~1 次/秒
+      lastSculptEmit = ctx.time;
+      bus.emit('sculpt', { dir });
+    }
   },
   place: placeEntity,
+  pet: (entity) => entity.pet?.(ctx),
 };
 
 // ---------------- 输入 ----------------
@@ -281,24 +309,37 @@ const input = new Input({
   water,
   tools,
   actions,
+  // pointerdown 时构建一次活恐龙列表（≤100 只，很便宜）；空中翼龙 v1 不可摸
+  getPetTargets: () => entities
+    .filter((e) => e.isDinosaur && e.alive && !e.consumed && !e.flying)
+    .map((e) => e.object3d),
 });
 
 // ---------------- 顶部动作 ----------------
+function syncSkyPhase() {
+  ctx.skyPhase = SKY_PHASES[sky.idx] || 'day';
+  audio.setMood(ctx.skyPhase);
+  bus.emit('skyphase', { phase: ctx.skyPhase });
+}
+
 function onAction(id) {
   if (id === 'daynight') {
     sky.cycle();
+    syncSkyPhase();
     audio.playWhoosh();
   } else if (id === 'rain') {
     weather.toggleRain(audio);
   } else if (id === 'rainbow') {
     weather.showRainbow(audio);
   }
+  bus.emit('action', { id });
 }
 
 function resetWorld() {
   applyWorldPreset(currentPreset);
   weather.reset(audio);
   sky.reset();
+  syncSkyPhase();
   saveWorld(); // 重置完成立即覆盖存档
 }
 
@@ -350,6 +391,9 @@ const ctx = {
   seaLevel: SEA_LEVEL,
   entities,
   audio,
+  bus,
+  particles,
+  skyPhase: 'day',
   removeEntity: requestRemove,
   createNest,
   layEgg,
@@ -366,6 +410,7 @@ function loop() {
   water.update(ctx.time);
   sky.update(dt, ctx.time);
   weather.update(dt);
+  particles.update(dt);
   for (const e of entities) e.update(dt, ctx);
   flushRemovals();
   stage.render();
@@ -388,4 +433,7 @@ window.__world = {
   saveWorld,
   restoreWorld,
   hasSave,
+  bus,
+  lastPet: 0, // 调试计数：冒烟测试验证“点恐龙=抚摸”
 };
+bus.on('pet', () => { window.__world.lastPet++; });
