@@ -307,6 +307,14 @@ export class Audio {
   }
 
   // 图鉴解锁：较长的上行琶音，最后的高音 C 保持余韵
+  // 稀有/闪光孵化：C-E-G 三和弦快速叠入 + 高音 sine 长闪烁
+  playMagicChord() {
+    [523.25, 659.25, 783.99].forEach((f, i) =>
+      this._tone(f, 0.5, { type: 'triangle', peak: 0.09, when: i * 0.06, echo: true })
+    );
+    this._tone(1567.98, 1.4, { type: 'sine', peak: 0.06, when: 0.25, echo: true });
+  }
+
   playUnlock() {
     const notes = [523.25, 659.25, 783.99, 1046.5];
     notes.forEach((f, i) =>

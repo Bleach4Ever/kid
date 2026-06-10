@@ -581,6 +581,42 @@ const variantState = await page.evaluate(() => {
   };
 });
 
+// ---------------- 神秘蛋 + 保底 ----------------
+// 投放 → 点击开启 → 0.5s 裂壳 → 孵出 1 只恐龙 + mystery.opened 推进
+const mysteryOpen = await page.evaluate(async () => {
+  const w = window.__world;
+  const egg = w.mysteryEggs._debugSpawn();
+  const spawned = !!egg?.isMysteryEgg && egg.alive;
+  const openedBefore = w.profile.get('mystery').opened;
+  const dinosBefore = w.entities.filter((e) => e.isDinosaur && e.alive).length;
+  egg.pet();
+  await new Promise((r) => setTimeout(r, 1100));
+  return {
+    spawned,
+    eggGone: !egg.alive,
+    opened: w.profile.get('mystery').opened - openedBefore,
+    dinoDelta: w.entities.filter((e) => e.isDinosaur && e.alive).length - dinosBefore,
+  };
+});
+
+// 保底确定性：只留镰刀龙未孵化、全部变体已收集、pity=2 → 下一抽必出镰刀龙且 pity 归零
+const pityState = await page.evaluate(() => {
+  const w = window.__world;
+  const ids = [...document.querySelectorAll('#dino-bar .tool-btn')].map((b) => b.dataset.tool);
+  const pedia = {};
+  for (const s of ids) {
+    pedia[s] = {
+      seen: true, hatched: s !== 'therizinosaurus', raised: false,
+      variants: { twilight: true, sunny: true, berry: true, sparkle: true },
+    };
+  }
+  w.profile.set('pedia', pedia);
+  w.profile.set('mystery', { opened: 5, pity: 2 });
+  const r = w.mysteryEggs.roll();
+  const m = w.profile.get('mystery');
+  return { species: r.species, opened: m.opened, pity: m.pity };
+});
+
 // ---------------- Profile v1 → v2 迁移 ----------------
 // 写入带图鉴印章的 v1 档案 → 加载后 counters 慷慨回填（老玩家进度不清零）
 await page.evaluate(() => {
@@ -818,6 +854,8 @@ console.log('locked click denied:', lockedClick);
 console.log('species unlock milestone:', unlockBefore, '-> after reload:', unlockAfterReload);
 console.log('profile v1->v2 migration:', migrated);
 console.log('variant chain:', variantState);
+console.log('mystery egg open:', mysteryOpen);
+console.log('mystery pity:', pityState);
 console.log('i18n switch:', i18nState, ' after reload:', i18nAfterReload);
 console.log('heights codec roundtrip ok:', codecOk);
 console.log('save before:', beforeSave, ' continue visible:', continueVisible);
@@ -934,6 +972,14 @@ if (variantState.restored.variant !== 'sparkle' || variantState.restored.savedVr
     variantState.eggVariant !== 'sparkle' || variantState.babyVariant !== 'sparkle' ||
     variantState.babySavedVr !== 'sparkle' || !variantState.pediaVariantStamp) {
   console.error('\n❌ variant roll/save/hatch/pedia chain broken', variantState);
+  process.exit(1);
+}
+if (!mysteryOpen.spawned || !mysteryOpen.eggGone || mysteryOpen.opened !== 1 || mysteryOpen.dinoDelta !== 1) {
+  console.error('\n❌ mystery egg spawn/open/hatch failed', mysteryOpen);
+  process.exit(1);
+}
+if (pityState.species !== 'therizinosaurus' || pityState.pity !== 0 || pityState.opened !== 6) {
+  console.error('\n❌ mystery pity guarantee failed', pityState);
   process.exit(1);
 }
 if (

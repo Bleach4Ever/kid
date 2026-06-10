@@ -24,8 +24,9 @@ import { profile } from './systems/Profile.js';
 import { Unlocks } from './systems/Unlocks.js';
 import { createTree, createFlower } from './entities/Tree.js';
 import { createDinosaur, SPECIES } from './entities/Dinosaur.js';
-import { createEgg, createNest as createNestEntity, createPoop } from './entities/Ecosystem.js';
+import { createEgg, createNest as createNestEntity, createPoop, createMysteryEgg } from './entities/Ecosystem.js';
 import { rollVariant, VARIANTS } from './entities/Variants.js';
+import { MysteryEggs } from './systems/MysteryEggs.js';
 import { LIMITS, SEA_LEVEL } from './constants.js';
 
 // ---------------- 语言（先于一切 UI） ----------------
@@ -307,6 +308,46 @@ function hatchEgg(egg) {
   bus.emit('hatch', { species: egg.species, variant: egg.variant || null });
 }
 
+// 神秘蛋开启：抽物种+变体（含保底）→ 大爆发庆祝 → 孵出宝宝（发现新物种 = 解锁）
+function openMysteryEgg(egg) {
+  if (!egg.alive) return;
+  const { species, variant } = mysteryEggs.roll();
+  const position = groundPosition(egg.object3d.position.x, egg.object3d.position.z);
+  egg.alive = false;
+  requestRemove(egg);
+  audio.playHatch();
+  particles.burst({ x: position.x, y: position.y + 1, z: position.z }, {
+    count: 40, colors: ['#b9a4ff', '#ffd96b', '#fff2c0', '#ff9ec4', '#8be0ff'],
+    speed: 3, gravity: 4, life: 1.1, size: 0.2,
+  });
+  // 硬上限：蛋照样开、烟花照样放，只是不出生（与 hatchEgg 同策略）
+  if (aliveDinoCount() >= quality.dinoCap) return;
+  const baby = createDinosaur(species, null, { variant });
+  addEntity(baby, position);
+  const isShiny = SPECIES[species].rarity === 'rare' || variant === 'sparkle';
+  if (isShiny) {
+    audio.playMagicChord();
+    setTimeout(() => particles.burst({ x: position.x, y: position.y + 1.4, z: position.z }, {
+      count: 18, colors: ['#ffd96b', '#fff2c0', '#ffffff'],
+      speed: 1.1, gravity: -0.5, life: 1.5, size: 0.16,
+    }), 400);
+  } else {
+    audio.playFanfare();
+  }
+  baby.startEmote?.('hatch', ctx);
+  bus.emit('hatch', { species, variant: variant || null, mystery: true });
+}
+
+const mysteryEggs = new MysteryEggs({
+  terrain,
+  spawnEgg: (point) => {
+    const egg = createMysteryEgg(openMysteryEgg);
+    addEntity(egg, groundPosition(point.x, point.z));
+    audio.playSparkle();
+    return egg;
+  },
+});
+
 function spawnPoop(dinosaur) {
   const direction = new THREE.Vector3(0, 0, -1)
     .applyQuaternion(dinosaur.object3d.quaternion)
@@ -414,9 +455,10 @@ const input = new Input({
   water,
   tools,
   actions,
-  // pointerdown 时构建一次活恐龙列表（≤100 只，很便宜）；空中翼龙 v1 不可摸
+  // pointerdown 时构建一次活恐龙列表（≤100 只，很便宜）；空中翼龙 v1 不可摸；
+  // 神秘蛋也算可点目标（点一下 = 开启）
   getPetTargets: () => entities
-    .filter((e) => e.isDinosaur && e.alive && !e.consumed && !e.flying)
+    .filter((e) => ((e.isDinosaur && !e.flying) || e.isMysteryEgg) && e.alive && !e.consumed)
     .map((e) => e.object3d),
 });
 
@@ -561,6 +603,7 @@ function loop() {
     sky.update(dt, ctx.time);
     weather.update(dt);
     worldEvents.update(dt);
+    if (gameStarted) mysteryEggs.update(dt); // 开始页期间不投放神秘蛋
     particles.update(dt);
     for (const e of entities) e.update(dt, ctx);
     flushRemovals();
@@ -599,6 +642,7 @@ window.__world = {
   worldEvents,
   profile,
   unlocksSys,
+  mysteryEggs,
   variants: { roll: rollVariant, VARIANTS },
   seaLevel: SEA_LEVEL,
   lastPet: 0, // 调试计数：冒烟测试验证“点恐龙=抚摸”

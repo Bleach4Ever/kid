@@ -170,6 +170,80 @@ export function createEgg(species, nest = null, dropTarget = null, variant = nul
   return wrapper;
 }
 
+// 神秘蛋：野外随机出现的惊喜通道。1.4× 紫壳金星斑、浮动旋转、金色粒子光柱信标。
+// 点一下裂壳开启（刻意不带 isEgg：窃蛋龙不会吃掉孩子的惊喜）；180s 没人理会自动开。
+export function createMysteryEgg(onOpen) {
+  const group = new THREE.Group();
+  const shellMat = makeMat('#b9a4ff');
+  const spotMat = makeMat('#ffd96b');
+  spotMat.emissive = new THREE.Color('#ffeaa0');
+  spotMat.emissiveIntensity = 0.4;
+  const shell = new THREE.Mesh(new THREE.IcosahedronGeometry(0.48, 2), shellMat);
+  shell.scale.set(1.15, 1.75, 1.15);
+  shell.position.y = 0.78;
+  shell.castShadow = true;
+  group.add(shell);
+  for (let i = 0; i < 5; i++) {
+    const spot = new THREE.Mesh(new THREE.IcosahedronGeometry(0.09, 0), spotMat);
+    const angle = (i / 5) * Math.PI * 2;
+    spot.position.set(Math.cos(angle) * 0.5, 0.66 + (i % 2) * 0.34, Math.sin(angle) * 0.5);
+    group.add(spot);
+  }
+
+  let age = 0;
+  let baseY = null;
+  let beaconTimer = 0.2;
+  let chimeTimer = 2;
+  let opening = -1;
+  let openFired = false;
+  const wrapper = {
+    object3d: group,
+    kind: 'mysteryEgg',
+    isMysteryEgg: true,
+    alive: true,
+    consumed: false,
+    // 点击 = 开启（getPetTargets 把神秘蛋也算进可点目标）
+    pet() {
+      if (opening < 0) opening = 0;
+    },
+    update(dt, ctx) {
+      age += dt;
+      if (baseY === null) baseY = group.position.y;
+      const intro = Math.min(1, age / 0.6);
+      group.scale.setScalar(Math.max(0.001, easeOutBack(intro)));
+      group.rotation.y += dt * 0.7;
+      group.position.y = baseY + 0.06 + Math.sin(age * 1.8) * 0.08;
+
+      // 光柱信标 + 节流的闪光音：孩子从远处就能发现它
+      beaconTimer -= dt;
+      if (beaconTimer <= 0) {
+        beaconTimer = 0.8;
+        const p = group.position;
+        ctx.particles.burst({ x: p.x, y: p.y + 1.5, z: p.z }, {
+          count: 6, colors: ['#ffd96b', '#fff2c0', '#d9c4ff'],
+          speed: 0.4, gravity: -2.2, life: 1.2, size: 0.14,
+        });
+      }
+      chimeTimer -= dt;
+      if (chimeTimer <= 0) {
+        chimeTimer = 8;
+        ctx.audio.playSparkle();
+      }
+
+      if (age >= 180 && opening < 0) opening = 0; // 没人理会：自动开启
+      if (opening >= 0) {
+        opening += dt;
+        group.rotation.z = Math.sin(opening * 40) * 0.14; // 裂壳抖动
+        if (opening >= 0.5 && !openFired) {
+          openFired = true;
+          onOpen(wrapper);
+        }
+      }
+    },
+  };
+  return wrapper;
+}
+
 export function createNest(species) {
   const group = new THREE.Group();
   const style = EGG_STYLES[species] || EGG_STYLES.triceratops;
