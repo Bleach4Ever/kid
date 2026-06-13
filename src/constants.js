@@ -14,6 +14,7 @@ export const DINO_CAP = 100;
 export const LIMITS = {
   tree: 120,
   flower: 160,
+  scenery: 140,
   bubble: 24,
   treat: 10,
   poop: 80,

@@ -70,6 +70,16 @@ export class Settings {
       (id) => this.quality.setPreference(id) // 内部写 profile.quality
     );
 
+    // 🦕 恐龙上限：少/中/多/超多（手动覆盖画质档的硬上限，人口标签即时刷新）
+    const caps = [40, 70, 100, 150];
+    const curCap = this.quality.dinoCap;
+    const closest = caps.reduce((a, b) => (Math.abs(b - curCap) < Math.abs(a - curCap) ? b : a));
+    this._options(panel, '🦕', 'settings.dinoCap',
+      caps.map((n) => ({ id: String(n), text: String(n) })),
+      String(closest),
+      (id) => this.quality.setDinoCap(Number(id))
+    );
+
     // 🌐 语言：中文 / English（文案固定双语显示，切换后整面板重建）
     this._options(panel, '🌐', 'settings.lang',
       [

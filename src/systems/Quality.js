@@ -27,6 +27,9 @@ export class Quality {
     this.onChange = onChange;
     this.tierName = null;
     this.dinoCap = DINO_CAP;
+    // 玩家在设置里手动选的恐龙上限（null = 跟随画质档）；优先于档位 cap
+    this.userCap = Number.isFinite(profile.get('dinoCap', null)) ? profile.get('dinoCap', null) : null;
+    this._tierCap = DINO_CAP;
     // 动态降级状态：dt 滚动均值 + 持续超阈时长；本会话只降一次
     this._avgDt = 1 / 60;
     this._slowFor = 0;
@@ -43,11 +46,20 @@ export class Quality {
     this.applyTier(resolveTier(this.preference));
   }
 
+  // 设置面板入口：手动设恐龙上限（覆盖档位 cap）。传 null 恢复跟随档位。
+  setDinoCap(n) {
+    this.userCap = Number.isFinite(n) ? n : null;
+    profile.set('dinoCap', this.userCap);
+    this.dinoCap = this.userCap ?? this._tierCap;
+    this.onChange?.(this.tierName, TIERS[this.tierName]);
+  }
+
   applyTier(name) {
     const tierName = TIERS[name] ? name : 'high';
     const tier = TIERS[tierName];
     this.tierName = tierName;
-    this.dinoCap = tier.dinoCap;
+    this._tierCap = tier.dinoCap;
+    this.dinoCap = this.userCap ?? this._tierCap; // 手动上限优先，否则跟随档位
     this.stage.applyQuality(tier);
     this.weather.setRainCount(tier.rainCount);
     this.onChange?.(tierName, tier);

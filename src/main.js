@@ -26,6 +26,7 @@ import { Unlocks } from './systems/Unlocks.js';
 import { createTree, createFlower } from './entities/Tree.js';
 import { createBubble } from './entities/Bubble.js';
 import { createTreatBall } from './entities/TreatBall.js';
+import { createScenery, pickScenery, SCENERY_KINDS } from './entities/Scenery.js';
 import { createDinosaur, SPECIES } from './entities/Dinosaur.js';
 import { createEgg, createNest as createNestEntity, createPoop, createMysteryEgg } from './entities/Ecosystem.js';
 import { rollVariant, VARIANTS } from './entities/Variants.js';
@@ -133,6 +134,8 @@ const PRESET_ENTITIES = {
     ['flower', 10, 16], ['flower', -18, -2], ['triceratops', -12, -4],
     ['stegosaurus', -4, -14], ['brachiosaurus', 0, 16], ['oviraptor', 14, 18],
     ['pterosaur', 0, 0],
+    ['rock', -26, 8], ['bush', 8, -10], ['mushroom', -16, 20],
+    ['grass', 2, 8], ['log', -24, -2], ['crystal', 28, -6],
   ],
   // 峡谷：树/恐龙放两侧台地，避开中间蜿蜒河谷（x≈sin(z*0.07)*10）
   canyon: [
@@ -140,6 +143,8 @@ const PRESET_ENTITIES = {
     ['flower', -24, 4], ['flower', 24, 8], ['flower', -26, -6], ['flower', 26, 18],
     ['triceratops', -26, 0], ['raptor', 26, -4], ['oviraptor', -24, 14],
     ['pterosaur', 0, 0],
+    ['cactus', -28, -6], ['rock', 28, 4], ['crystal', -30, 18],
+    ['grass', 24, -12], ['bush', -22, -18],
   ],
   // 群岛：实体落在四座岛中心附近的陆地上
   islands: [
@@ -148,6 +153,8 @@ const PRESET_ENTITIES = {
     ['tree', 18, 14], ['tree', 24, 18], ['flower', 16, 8], ['stegosaurus', 20, 14],
     ['tree', 26, -24], ['raptor', 24, -22], ['flower', -17, 31],
     ['pterosaur', 0, 0],
+    ['rock', -20, -12], ['bush', 22, 16], ['grass', -25, -2],
+    ['mushroom', 20, -22], ['crystal', -15, 29],
   ],
   blank: [],
 };
@@ -231,6 +238,15 @@ function placeEntity(point, kind) {
     particles.burst({ x: point.x, y: y + 0.5, z: point.z }, {
       count: 10, colors: ['#8fdf7a', '#bce98c', '#6fc96b'], speed: 1.6, gravity: 4, life: 0.7, size: 0.16,
     });
+  } else if (kind === 'scenery') {
+    // 景物：按地形随机一种装饰（水边芦苇/高处仙人掌/平地石头草丛…）。拖动可撒出一片。LIMITS.scenery 控量。
+    const groundY = Math.max(SEA_LEVEL - 0.1, terrain.getHeightAt(point.x, point.z));
+    addEntity(createScenery(pickScenery(groundY)), new THREE.Vector3(point.x, groundY, point.z));
+    audio.playPlop();
+    particles.burst({ x: point.x, y: groundY + 0.3, z: point.z }, {
+      count: 7, colors: ['#d8c7a0', '#c9b890', '#b8d08a'], speed: 1.4, gravity: 5, life: 0.6, size: 0.15,
+    });
+    return; // 景物不计入图鉴/里程碑（但会入存档）
   } else if (kind === 'bubble') {
     // 泡泡棒：冒出 3 颗泡泡，缓缓升起（恐龙会跑来顶破）。LIMITS.bubble 自动控量。
     const groundY = Math.max(SEA_LEVEL, terrain.getHeightAt(point.x, point.z));
@@ -280,7 +296,9 @@ function placePresetEntity(kind, x, z) {
     ? createTree()
     : kind === 'flower'
       ? createFlower()
-      : createDinosaur(kind);
+      : SCENERY_KINDS.includes(kind)
+        ? createScenery(kind)
+        : createDinosaur(kind);
   addEntity(wrapper, new THREE.Vector3(x, y, z));
 }
 
@@ -460,6 +478,8 @@ function snapshotWorld() {
     const { x, z } = e.object3d.position;
     if (e.kind === 'tree' || e.kind === 'flower') {
       saved.push({ k: e.kind, x: r(x), z: r(z) });
+    } else if (e.kind === 'scenery') {
+      saved.push({ k: 'scenery', s: e.prop, x: r(x), z: r(z) });
     } else if (e.isNest) {
       saved.push({ k: 'nest', s: e.species, x: r(x), z: r(z) });
     } else if (e.isDinosaur && e.getSaveState) {
@@ -495,6 +515,8 @@ function restoreWorld(save) {
   for (const rec of save.entities) {
     if (rec.k === 'tree' || rec.k === 'flower') {
       placePresetEntity(rec.k, rec.x, rec.z);
+    } else if (rec.k === 'scenery') {
+      addEntity(createScenery(rec.s), groundPosition(rec.x, rec.z));
     } else if (rec.k === 'nest' && SPECIES[rec.s]) {
       createNest(rec.s, { x: rec.x, z: rec.z });
     } else if (rec.k === 'dino' && SPECIES[rec.s]) {
@@ -515,6 +537,23 @@ window.addEventListener('pagehide', saveWorld);
 
 const hungerBubble = new HungerBubble(); // 点恐龙 → 头顶冒出肚子条（饥饿度）
 
+// 合唱呼应：点一只地面恐龙，附近最多 4 只同物种同伴依次（卡农式）叫一声应和
+function startChorus(lead) {
+  const sp = lead.species;
+  const lp = lead.object3d.position;
+  const mates = [];
+  for (const e of entities) {
+    if (e === lead || !e.isDinosaur || !e.alive || e.consumed || e.flying) continue;
+    if (e.species !== sp || e.lifeState === 'sleeping') continue;
+    const d2 = (e.object3d.position.x - lp.x) ** 2 + (e.object3d.position.z - lp.z) ** 2;
+    if (d2 < 196) mates.push({ e, d2 }); // 14u 内
+  }
+  mates.sort((a, b) => a.d2 - b.d2);
+  mates.slice(0, 4).forEach((m, i) => {
+    setTimeout(() => m.e.sing?.(ctx), 260 * (i + 1)); // 依次接力，间隔 > 叫声节流
+  });
+}
+
 let lastSculptEmit = -Infinity;
 const actions = {
   sculpt: (point, dir) => {
@@ -530,6 +569,7 @@ const actions = {
     entity.pet?.(ctx);
     if (entity.isDinosaur && entity.getHunger)
       hungerBubble.show(entity, (e) => e.feed?.(ctx)); // 头顶泡泡，饿了可手动喂
+    if (entity.isDinosaur && entity.species) startChorus(entity); // 点一只 → 同伴依次应和
   },
   tickle: (entity) => entity.tickle?.(ctx), // 挠痒工具点恐龙
   // 流星许愿：点中流星 → 喂饱最饿的恐龙 + 花朵开放 + 漫天闪光
@@ -644,6 +684,8 @@ function onAction(id) {
     bus.emit('whistle', { species: top, count: max });
   } else if (EVENT_IDS.has(id)) {
     worldEvents.trigger(id, audio);
+    // 极光：让地面恐龙在极光持续期间停下抬头望天（与 WorldEvents 极光时长一致）
+    if (id === 'aurora') ctx.auroraUntil = ctx.time + 18;
   } else if (id === 'pedia') {
     pedia.toggle();
   } else if (id === 'settings') {
@@ -736,6 +778,7 @@ const ctx = {
   bloom: 1,         // 花朵开放度（晴/彩虹=1，阴雨=0），花朵据此缓动开合
   bubbleUntil: 0,   // 有泡泡在场的截止 ctx.time（恐龙只在此前扫描追泡泡，省性能）
   treatUntil: 0,    // 有零食球在场的截止 ctx.time（恐龙只在此前扫描追零食球，省性能）
+  auroraUntil: 0,   // 极光持续的截止 ctx.time（恐龙在此前停下抬头望天）
 };
 const clock = new Clock(timeOfDay); // 左下角卡通时钟（表盘 + 数字）
 const frameClock = new THREE.Clock();
@@ -850,6 +893,7 @@ window.__world = {
   clock,
   variants: { roll: rollVariant, VARIANTS },
   seaLevel: SEA_LEVEL,
+  ctx, // 调试/测试句柄：直接读写 auroraUntil/treatUntil/bubbleUntil 等运行时标志
   lastPet: 0, // 调试计数：冒烟测试验证“点恐龙=抚摸”
 };
 bus.on('pet', () => { window.__world.lastPet++; });

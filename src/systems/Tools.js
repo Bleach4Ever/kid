@@ -8,6 +8,7 @@ export const BASE_TOOLS = [
   { id: 'ocean', icon: '🌊', label: 'tool.ocean', type: 'sculpt', dir: -1, cat: 'earth' },
   { id: 'tree', icon: '🌳', label: 'tool.tree', type: 'place', kind: 'tree', cat: 'plant' },
   { id: 'flower', icon: '🌷', label: 'tool.flower', type: 'place', kind: 'flower', cat: 'plant' },
+  { id: 'scenery', icon: '🪨', label: 'tool.scenery', type: 'place', kind: 'scenery', cat: 'plant' },
   { id: 'bubble', icon: '🫧', label: 'tool.bubble', type: 'place', kind: 'bubble', cat: 'special' },
   { id: 'tickle', icon: '🪶', label: 'tool.tickle', type: 'tickle', cat: 'special' },
   { id: 'treat', icon: '🍪', label: 'tool.treat', type: 'place', kind: 'treat', cat: 'special' },

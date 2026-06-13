@@ -20,6 +20,11 @@ const toothMat = new THREE.MeshStandardMaterial({ color: '#fff8df', flatShading:
 const catchFishMat = new THREE.MeshStandardMaterial({ color: '#ff9e6b', flatShading: true, roughness: 0.7 });
 const zzzMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85, depthTest: false });
 const HEART_COLORS = ['#ff6f9c', '#ff9ec4', '#ffd3e2'];
+// 泥点（洗澡玩法）：共享小球几何/材质，恐龙偶尔沾上、用泡泡洗掉
+const mudGeo = new THREE.IcosahedronGeometry(0.13, 0);
+mudGeo.userData.shared = true;
+const mudMat = new THREE.MeshStandardMaterial({ color: '#7a5535', roughness: 0.95, flatShading: true });
+const MUD_SPOTS = [[0.26, 0.34, 0.2], [-0.3, 0.3, -0.12], [0.12, 0.26, -0.32], [-0.16, 0.46, 0.24], [0.3, 0.5, -0.18]];
 
 // rarity：common 初始可用 / uncommon 里程碑解锁 / rare 里程碑或仅神秘蛋；
 // 只影响获取渠道与视觉炫耀，不影响任何玩法数值（无竞争设计）
@@ -598,6 +603,10 @@ export function createDinosaur(species, saved = null, opts = {}) {
   let startleCool = Math.random() * 2;       // 食草龙受惊冷却，避免一群龙抖个不停
   let spinT = -1;                            // 挠痒到位的开心大转圈计时（-1=没在转）
   let treatCool = 0;                         // 啃零食球的间隔冷却（避免每帧狂啃）
+  let gazeWonderTimer = 0;                    // 极光仰望时的惊叹小粒子节拍
+  let nuzzleCool = 1 + Math.random() * 5;     // 宝宝蹭领队的间隔
+  let muddyTimer = 50 + Math.random() * 40;   // 沾泥/干掉的计时（洗澡玩法）
+  let mudGroup = null;                       // 泥点容器（懒建）
   let raisedEmitted = age >= 60; // 读档的成年龙不再重复发 raised
 
   function growthFactor() {
@@ -873,6 +882,42 @@ export function createDinosaur(species, saved = null, opts = {}) {
     ctx.bus.emit('pet', { species });
   };
 
+  // 合唱呼应：被点的恐龙叫完，附近同伴依次「应和」——叫一声 + 点头 + 头顶冒小音符
+  wrapper.sing = (ctx) => {
+    if (!wrapper.alive || wrapper.consumed || wrapper.flying) return;
+    if (wrapper.lifeState === 'sleeping') return;
+    ctx.audio?.playCry?.(species);
+    nodTime = 0.5; // 轻轻点个头
+    if (ctx?.particles) {
+      const p = group.position;
+      ctx.particles.burst({ x: p.x, y: p.y + wrapper.size * 1.35, z: p.z }, {
+        count: 4, colors: ['#8be0ff', '#c8b6ff', '#ffffff'], speed: 0.9, gravity: -1.1, life: 1.0, size: 0.18,
+      });
+    }
+  };
+
+  // 洗澡玩法：沾泥/洗净。泥点是 group 的子节点，随体型一起缩放。
+  function setMuddy(on) {
+    if (on === wrapper.muddy) return;
+    wrapper.muddy = on;
+    if (on) {
+      if (!mudGroup) {
+        mudGroup = new THREE.Group();
+        for (const [x, y, z] of MUD_SPOTS) {
+          const m = new THREE.Mesh(mudGeo, mudMat);
+          m.position.set(x, y, z);
+          m.scale.setScalar(0.6 + Math.random() * 0.5);
+          mudGroup.add(m);
+        }
+        group.add(mudGroup);
+      }
+      mudGroup.visible = true;
+    } else if (mudGroup) {
+      mudGroup.visible = false;
+    }
+  }
+  wrapper.setMuddy = setMuddy; // 调试/测试句柄：强制沾泥/洗净
+
   // 挠痒：每点一下咯咯笑+扭一下；连挠 4 下笑到打转 + 五彩花瓣喷发（2.5s 不挠就忘掉进度）
   wrapper.tickle = (ctx) => {
     if (!wrapper.alive || wrapper.consumed) return;
@@ -1024,6 +1069,42 @@ export function createDinosaur(species, saved = null, opts = {}) {
     }
     hiccupTimer -= dt;
 
+    // 洗澡玩法：陆地恐龙偶尔沾上泥点（~50-90s 一轮），洗净或自然干掉后再循环；泡泡棒可提前洗净
+    if (!wrapper.flying && !wrapper.swimming) {
+      muddyTimer -= dt;
+      if (muddyTimer <= 0) {
+        if (wrapper.muddy) { setMuddy(false); muddyTimer = 45 + Math.random() * 55; }
+        else { setMuddy(true); muddyTimer = 50 + Math.random() * 40; }
+      }
+    }
+
+    // 极光仰望：极光降临时，地面恐龙停下脚步、坐低一点、缓缓抬头望天（情感「啊~」时刻）
+    if (
+      ctx.auroraUntil && ctx.time < ctx.auroraUntil &&
+      !wrapper.flying && !wrapper.swimming &&
+      wrapper.lifeState !== 'sleeping' && wrapper.lifeState !== 'laying'
+    ) {
+      wrapper.lifeState = 'gazing';
+      wrapper.target = null;
+      alertMarker.visible = false;
+      group.rotation.x += (-0.24 - group.rotation.x) * Math.min(1, dt * 3); // 缓缓抬头
+      group.scale.set(visualScale * breathe, visualScale * breathe * 0.93, visualScale * breathe); // 坐低一点
+      gazeWonderTimer -= dt;
+      if (gazeWonderTimer <= 0 && ctx.particles) {
+        gazeWonderTimer = 1.4 + Math.random() * 1.6;
+        const p = group.position;
+        ctx.particles.burst({ x: p.x, y: p.y + wrapper.size * 1.6, z: p.z }, {
+          count: 2, colors: ['#b9a4ff', '#8be0ff', '#fff2c0'], speed: 0.4, gravity: -0.4, life: 1.5, size: 0.13,
+        });
+      }
+      return;
+    }
+    // 仰望结束后让抬起的头缓缓回正
+    if (nodTime <= 0 && group.rotation.x !== 0) {
+      group.rotation.x += (0 - group.rotation.x) * Math.min(1, dt * 4);
+      if (Math.abs(group.rotation.x) < 0.002) group.rotation.x = 0;
+    }
+
     // 集合：白天吹哨 → 同物种地面龙聚向哨声点（优先于觅食/漫步；睡觉/飞行/游泳不响应）
     if (
       ctx.gatherUntil && ctx.time < ctx.gatherUntil && ctx.gatherTo &&
@@ -1073,6 +1154,17 @@ export function createDinosaur(species, saved = null, opts = {}) {
         const d = moveToward({ x: bub.object3d.position.x, z: bub.object3d.position.z }, dt, ctx.terrain, 1.5);
         if (d <= Math.max(0.8, wrapper.size * 0.85) && bub.consume(ctx.removeEntity)) {
           wrapper.startEmote('pet', ctx); // 顶破了开心一下
+          // 泡泡顺手把身上的泥点洗干净 → 闪亮 + 肥皂泡
+          if (wrapper.muddy) {
+            setMuddy(false);
+            muddyTimer = 50 + Math.random() * 50;
+            ctx.audio?.playSparkle?.();
+            const p = group.position;
+            ctx.particles.burst({ x: p.x, y: p.y + wrapper.size, z: p.z }, {
+              count: 12, colors: ['#ffffff', '#cdeeff', '#bdf0ff', '#fff2c0'],
+              speed: 1.4, gravity: -0.6, life: 1.0, size: 0.16,
+            });
+          }
         }
         return;
       }
@@ -1503,14 +1595,25 @@ export function createDinosaur(species, saved = null, opts = {}) {
         }
         wrapper._leader = best;
       }
+      nuzzleCool -= dt;
       if (wrapper._leader) {
         const lp = wrapper._leader.object3d.position;
-        if (Math.hypot(lp.x - group.position.x, lp.z - group.position.z) > 3.5) {
+        const ld = Math.hypot(lp.x - group.position.x, lp.z - group.position.z);
+        if (ld > 3.5) {
           wanderTarget = { x: lp.x, z: lp.z }; // 落后了 → 直接追领队
+        } else if (ld < 1.8 && nuzzleCool <= 0) {
+          // 挨着领队了：蹭一下冒爱心，领队放慢脚步等等它（亲子萌时刻）
+          nuzzleCool = 6 + Math.random() * 4;
+          wrapper.startEmote('pet', ctx);
+          wrapper._leader._waitTimer = 1.4;
         }
       }
     } else {
       wrapper._leader = null; // 断奶后独立
+    }
+    if (wrapper._waitTimer > 0) {
+      wrapper._waitTimer -= dt; // 停下等等跟在身后的宝宝，原地踏步（呼吸/点头照常）
+      return;
     }
     if (
       wrapper._waterBlocked ||
