@@ -588,7 +588,7 @@ const luckyState = await page.evaluate(() => {
   return { unlocks: JSON.parse(localStorage.getItem('dino-world:profile')).unlocks };
 });
 
-// 打开 ✨ → 魔法面板滑出，5 个按钮（🌈🌸🌠🌌🌋）全部可见
+// 打开 ✨ → 魔法面板滑出，6 个按钮（🌈🎶🌸🌠🌌🌋）全部可见
 await page.locator('#top-bar .tool-btn').nth(1).click({ force: true });
 await page.waitForTimeout(350);
 const magicPanel = await page.evaluate(() => {
@@ -599,9 +599,9 @@ const magicPanel = await page.evaluate(() => {
   };
 });
 
-// 🌸 花瓣雨：按钮触发 → active；快进结束 → 自动补种，花数增加
+// 🌸 花瓣雨：按钮触发 → active；快进结束 → 自动补种，花数增加（nth(2)：🌈🎶 之后）
 const flowerBefore = await page.evaluate(() => window.__world.counts.flower || 0);
-await page.locator('#magic-bar .tool-btn').nth(1).click({ force: true });
+await page.locator('#magic-bar .tool-btn').nth(2).click({ force: true });
 await page.waitForTimeout(200);
 const flowerRainActive = await page.evaluate(() => window.__world.worldEvents.active);
 const flowerRainEnd = await page.evaluate(() => {
@@ -1282,7 +1282,7 @@ if (milestone.stars < 3 || !milestone.unlocks.includes('egg.golden')) {
   console.error('\n❌ 3-star milestone did not unlock egg.golden in profile.unlocks');
   process.exit(1);
 }
-if (!magicFirstOpen.open || magicFirstOpen.visibleBtns !== 1 || !rainbowShown) {
+if (!magicFirstOpen.open || magicFirstOpen.visibleBtns !== 2 || !rainbowShown) {
   console.error('\n❌ magic panel should start with only 🌈 visible, and panel rainbow click must work');
   process.exit(1);
 }
@@ -1291,7 +1291,7 @@ if (!EVENT_UNLOCKS.every((id) => magicSetup.unlocks.includes(id))) {
   console.error('\n❌ 20 stars did not unlock all event.* ids');
   process.exit(1);
 }
-if (!magicPanel.open || magicPanel.visibleBtns !== 5) {
+if (!magicPanel.open || magicPanel.visibleBtns !== 6) {
   console.error('\n❌ magic panel should show all 5 buttons after unlocking everything');
   process.exit(1);
 }

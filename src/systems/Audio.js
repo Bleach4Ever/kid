@@ -512,6 +512,71 @@ export class Audio {
     this.auroraNode = null;
   }
 
+  // 打哈欠：长长的下行叹气
+  playYawn() {
+    if (!this._cryOk()) return;
+    this._tone(300, 0.5, { type: 'sine', peak: 0.06, slideTo: 150 });
+  }
+
+  // 打嗝：短促一声「嗝」
+  playHiccup() {
+    if (!this.ctx) return;
+    this._tone(680, 0.07, { type: 'square', peak: 0.09, slideTo: 520 });
+  }
+
+  // 受惊：一声短促上扬的「咦!」
+  playStartle() {
+    if (!this._cryOk()) return;
+    this._tone(1300, 0.12, { type: 'sine', peak: 0.1, slideTo: 950 });
+  }
+
+  // 吹哨召唤：两声欢快上扬的哨音
+  playWhistle() {
+    if (!this.ctx) return;
+    this._tone(660, 0.18, { type: 'sine', peak: 0.12, slideTo: 990 });
+    this._tone(880, 0.22, { type: 'sine', peak: 0.1, when: 0.16, slideTo: 1180, echo: true });
+  }
+
+  // 叠叠睡鼾声：多堆共用一个柔和低频音垫 + 慢呼吸 LFO，按打鼾者 id 引用计数，全醒才停
+  startSnore(id) {
+    if (!this.ctx) return;
+    this._snorers = this._snorers || new Set();
+    this._snorers.add(id);
+    if (this.snoreNode) return;
+    const t = this.ctx.currentTime;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.05, t + 1.2);
+    const o1 = this.ctx.createOscillator();
+    const o2 = this.ctx.createOscillator();
+    const lfo = this.ctx.createOscillator();
+    const lfoGain = this.ctx.createGain();
+    o1.type = 'sine'; o2.type = 'sine'; lfo.type = 'sine';
+    o1.frequency.value = 70;   // 低沉的鼾
+    o2.frequency.value = 105;
+    o2.detune.value = -6;
+    lfo.frequency.value = 0.45; // 慢呼吸起伏
+    lfoGain.gain.value = 0.03;
+    lfo.connect(lfoGain);
+    lfoGain.connect(g.gain);
+    o1.connect(g); o2.connect(g);
+    g.connect(this.sfxGain);
+    o1.start(t); o2.start(t); lfo.start(t);
+    this.snoreNode = { o1, o2, lfo, g };
+  }
+
+  stopSnore(id) {
+    if (this._snorers) this._snorers.delete(id);
+    if (!this.snoreNode || (this._snorers && this._snorers.size > 0)) return;
+    const { o1, o2, lfo, g } = this.snoreNode;
+    const t = this.ctx.currentTime;
+    g.gain.cancelScheduledValues(t);
+    g.gain.setValueAtTime(Math.max(0.0001, g.gain.value), t);
+    g.gain.linearRampToValueAtTime(0.0001, t + 1.0);
+    o1.stop(t + 1.1); o2.stop(t + 1.1); lfo.stop(t + 1.1);
+    this.snoreNode = null;
+  }
+
   // 🌋 火山：滤波噪声隆隆（循环到 stop）+ 打击式低音 pop
   startRumble() {
     if (!this.ctx || this.rumbleNode) return;

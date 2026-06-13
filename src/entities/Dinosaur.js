@@ -13,6 +13,7 @@ const MAX_GROWTH = 2.2;    // 成长上限（相对成年）
 const GROW_SECONDS = 90;   // 仅靠年龄长到成年所需秒数（更长一点，肉眼可见）
 const FEED_GROWTH = 0.12;  // 手动喂一口的成长量（主推手）
 const EAT_GROWTH = 0.05;   // 自动觅食一餐的成长量（次要）
+const WEAN_AGE = 60;       // 宝宝跟随领队成群的年龄上限，之后断奶独立漫游
 const eyeMat = new THREE.MeshStandardMaterial({ color: '#30283a', roughness: 0.7 });
 const eyeShineMat = new THREE.MeshBasicMaterial({ color: '#ffffff' }); // 眼睛高光小点，整体更萌
 const toothMat = new THREE.MeshStandardMaterial({ color: '#fff8df', flatShading: true });
@@ -592,6 +593,9 @@ export function createDinosaur(species, saved = null, opts = {}) {
   let callTimer = 10 + Math.random() * 15;
   let nodTime = 0;
   let emoteTime = -1;
+  let emoteKind = null;                     // 当前 emote 类型（控制小跳高度等）
+  let hiccupTimer = 25 + Math.random() * 55; // 偶发打嗝（漫步时的小俏皮）
+  let startleCool = Math.random() * 2;       // 食草龙受惊冷却，避免一群龙抖个不停
   let raisedEmitted = age >= 60; // 读档的成年龙不再重复发 raised
 
   function growthFactor() {
@@ -614,13 +618,24 @@ export function createDinosaur(species, saved = null, opts = {}) {
   }
 
   function chooseLandTarget(ctx) {
-    // 结伴：35% 概率去同物种伙伴附近 → 自然成群
+    // 跟随领队：宝宝优先紧跟缓存的同物种成年「领队」，于是一家子排成跟随队列一起走
+    if (age < WEAN_AGE && wrapper._leader && wrapper._leader.alive && !wrapper._leader.consumed) {
+      const lp = wrapper._leader.object3d.position;
+      const off = diskTarget(2.2);
+      const x = clamp(lp.x + off.x, -BOUND, BOUND);
+      const z = clamp(lp.z + off.z, -BOUND, BOUND);
+      if (ctx.terrain.getHeightAt(x, z) > SEA_LEVEL + 0.15) return { x, z };
+    }
+    if (wrapper._leader && (!wrapper._leader.alive || wrapper._leader.consumed)) wrapper._leader = null;
+    if (age >= WEAN_AGE) wrapper._leader = null; // 断奶后独立
+    // 结伴：35% 概率去同物种伙伴附近 → 自然成群；宝宝遇到成年同类就认作领队
     if (Math.random() < 0.35) {
       const friends = ctx.entities.filter((e) =>
         e !== wrapper && e.isDinosaur && e.alive && !e.consumed && !e.flying && e.species === species
       );
       if (friends.length) {
         const buddy = friends[(Math.random() * friends.length) | 0];
+        if (age < WEAN_AGE && !wrapper._leader && buddy.size >= config.baseSize * 0.95) wrapper._leader = buddy;
         const offset = diskTarget(3);
         const x = clamp(buddy.object3d.position.x + offset.x, -BOUND, BOUND);
         const z = clamp(buddy.object3d.position.z + offset.z, -BOUND, BOUND);
@@ -805,18 +820,32 @@ export function createDinosaur(species, saved = null, opts = {}) {
     return true;
   }
 
-  // 开心 emote：地面龙 0.9s 抛物线跳 + 落地压扁；飞行龙只迸发粒子（不与飞行高度打架）。
-  // type: 'eat' 暖橙+嫩绿（进食）/ 'pet' 爱心粉（抚摸）。可被重复触发——连点也始终有反馈。
+  // emote：地面龙小跳/性格反应；飞行龙只迸发粒子（不与飞行高度打架）。可重复触发——连点也始终有反馈。
+  // 类型：eat/pet 开心小跳；hiccup 打嗝小跳；yawn 打哈欠（叹气+犯困粒子）；startled 受惊（低头一缩）。
+  const EMOTE_PALETTE = {
+    eat: ['#ffd27f', '#ffb35c', '#9be08a'],
+    pet: HEART_COLORS,
+    hiccup: ['#ffe9a8', '#fff2c0'],
+    yawn: ['#cfe8ff', '#ffffff', '#e8f4ff'],
+    startled: ['#ffffff', '#ffd9d9'],
+  };
+  const HOP_EMOTES = new Set(['eat', 'pet', 'hiccup']);
   wrapper.startEmote = (type, ctx) => {
     if (!wrapper.alive || wrapper.consumed) return;
-    if (!wrapper.flying) emoteTime = 0; // 重启小跳；飞行龙保持飞行高度，仅发粒子
+    emoteKind = type;
+    if (!wrapper.flying && HOP_EMOTES.has(type)) emoteTime = 0; // 仅这几种做小跳
+    if (type === 'yawn') ctx?.audio?.playYawn?.();
+    else if (type === 'hiccup') ctx?.audio?.playHiccup?.();
+    else if (type === 'startled') { ctx?.audio?.playStartle?.(); nodTime = 0.3; } // 受惊：快速低头一缩
     if (ctx?.particles) {
       const p = group.position;
-      const colors = type === 'eat'
-        ? ['#ffd27f', '#ffb35c', '#9be08a']
-        : HEART_COLORS;
+      const colors = EMOTE_PALETTE[type] || HEART_COLORS;
+      const count = type === 'eat' ? 14 : type === 'startled' ? 8 : type === 'yawn' ? 5 : type === 'hiccup' ? 4 : 10;
       ctx.particles.burst({ x: p.x, y: p.y + wrapper.size * 1.2, z: p.z }, {
-        count: type === 'eat' ? 14 : 10, colors, speed: 1.3, gravity: -1.4, life: 0.95, size: 0.22,
+        count, colors,
+        speed: type === 'startled' ? 1.8 : 1.3,
+        gravity: type === 'yawn' ? -0.5 : -1.4,
+        life: type === 'yawn' ? 1.2 : 0.95, size: 0.22,
       });
     }
   };
@@ -834,6 +863,7 @@ export function createDinosaur(species, saved = null, opts = {}) {
     } else if (wrapper.lifeState === 'sleeping') {
       wrapper.lifeState = 'wandering';
       wakeTimer = 20;
+      if (wrapper._snoring) { ctx.audio?.stopSnore?.(wrapper.object3d.id); wrapper._snoring = false; }
     }
     wrapper.startEmote('pet', ctx);
     ctx.audio.playCry(species);
@@ -846,7 +876,11 @@ export function createDinosaur(species, saved = null, opts = {}) {
     wrapper.hungerTimer = SATIATION_MAX; // 一口喂饱，泡泡立刻满格 😊
     wrapper.mealsEaten++;
     foodGrowth += FEED_GROWTH;           // 喂养即成长（戏剧性变大的主推手）
-    if (wrapper.lifeState === 'sleeping') { wrapper.lifeState = 'wandering'; wakeTimer = 20; }
+    if (wrapper.lifeState === 'sleeping') {
+      wrapper.lifeState = 'wandering';
+      wakeTimer = 20;
+      if (wrapper._snoring) { ctx.audio?.stopSnore?.(wrapper.object3d.id); wrapper._snoring = false; }
+    }
     wrapper.target = null;               // 修：觅食目标字段是 target（原 foodTarget 为空操作）
     wrapper.startEmote('eat', ctx);
     ctx.audio.playTreat();               // 专属「好吃!」音效，区别于自动进食
@@ -904,7 +938,8 @@ export function createDinosaur(species, saved = null, opts = {}) {
       const t = Math.min(1, emoteTime / 0.9);
       const hop = Math.sin(t * Math.PI);
       const p = group.position;
-      p.y = Math.max(ctx.seaLevel, ctx.terrain.getHeightAt(p.x, p.z)) + hop * wrapper.size * 0.55;
+      const hopScale = emoteKind === 'hiccup' ? 0.22 : 0.55; // 打嗝是小跳一下
+      p.y = Math.max(ctx.seaLevel, ctx.terrain.getHeightAt(p.x, p.z)) + hop * wrapper.size * hopScale;
       // 起跳拉伸、落地压扁
       const squash = t > 0.82 ? 1 - Math.sin(((t - 0.82) / 0.18) * Math.PI) * 0.2 : 1 + hop * 0.12;
       const wide = 1 + (1 - squash) * 0.6;
@@ -940,6 +975,35 @@ export function createDinosaur(species, saved = null, opts = {}) {
     if (nodTime > 0) {
       nodTime = Math.max(0, nodTime - dt);
       group.rotation.x = -Math.sin((1 - nodTime / 0.6) * Math.PI) * 0.16;
+    }
+    hiccupTimer -= dt;
+
+    // 集合：白天吹哨 → 同物种地面龙聚向哨声点（优先于觅食/漫步；睡觉/飞行/游泳不响应）
+    if (
+      ctx.gatherUntil && ctx.time < ctx.gatherUntil && ctx.gatherTo &&
+      !wrapper.flying && !wrapper.swimming && wrapper.lifeState !== 'sleeping'
+    ) {
+      wrapper.lifeState = 'gathering';
+      wrapper.target = null;
+      alertMarker.visible = false;
+      moveToward(ctx.gatherTo, dt, ctx.terrain, 1.35);
+      return;
+    }
+
+    // 受惊：食草龙发现附近有正在捕猎的食肉龙 → 低头一缩（无伤，纯表情，教孩子读情绪）
+    startleCool -= dt;
+    if (
+      startleCool <= 0 && config.diet === 'herbivore' &&
+      !wrapper.flying && !wrapper.swimming && emoteTime < 0 && wrapper.lifeState !== 'sleeping'
+    ) {
+      startleCool = 1.2 + Math.random();
+      for (const other of ctx.entities) {
+        if (other === wrapper || !other.isDinosaur || !other.alive || other.consumed) continue;
+        if (other.diet !== 'carnivore' || !other.target) continue;
+        const dx = other.object3d.position.x - group.position.x;
+        const dz = other.object3d.position.z - group.position.z;
+        if (dx * dx + dz * dz < 100) { wrapper.startEmote('startled', ctx); break; }
+      }
     }
 
     if (wrapper.flying) {
@@ -1213,10 +1277,12 @@ export function createDinosaur(species, saved = null, opts = {}) {
     wakeTimer = Math.max(0, wakeTimer - dt);
     if (wrapper.lifeState === 'sleeping' && ctx.skyPhase !== 'night') {
       wrapper.lifeState = 'wandering';
+      if (wrapper._snoring) { ctx.audio?.stopSnore?.(wrapper.object3d.id); wrapper._snoring = false; }
     } else if (
       wrapper.lifeState !== 'sleeping' &&
       ctx.skyPhase === 'night' && !wrapper.target && wrapper.eggTimer > 5 && wakeTimer === 0
     ) {
+      wrapper.startEmote('yawn', ctx); // 入睡前打个大哈欠
       wrapper.lifeState = 'sleeping';
       nodTime = 0; // 入睡打断点头：复位角度，避免歪着头睡一整晚
       group.rotation.x = 0;
@@ -1224,6 +1290,38 @@ export function createDinosaur(species, saved = null, opts = {}) {
     if (wrapper.lifeState === 'sleeping') {
       alertMarker.visible = false;
       sleepMarker.visible = true;
+      // 叠叠睡：夜里同物种就近挨成一小堆（确定性领队=范围内最小 id，避免抖动）
+      let leader = wrapper, idx = 0, pileSize = 1;
+      for (const e of ctx.entities) {
+        if (e === wrapper || !e.isDinosaur || !e.alive || e.consumed) continue;
+        if (e.flying || e.swimming || e.species !== species || e.lifeState !== 'sleeping') continue;
+        const ex = e.object3d.position.x - group.position.x;
+        const ez = e.object3d.position.z - group.position.z;
+        if (ex * ex + ez * ez > 9) continue; // 3u 内才算同一堆
+        pileSize++;
+        if (e.object3d.id < leader.object3d.id) leader = e;
+        if (e.object3d.id < wrapper.object3d.id) idx++;
+      }
+      if (leader !== wrapper) {
+        // 朝领队轻轻靠拢到一臂之距 + 按层序微微叠高，蜷成软软一小堆
+        const lp = leader.object3d.position;
+        const dxl = lp.x - group.position.x, dzl = lp.z - group.position.z;
+        const dl = Math.hypot(dxl, dzl);
+        const minGap = wrapper.size * 0.7;
+        if (dl > minGap) {
+          const pull = Math.min(1, dt * 0.8) * (dl - minGap) / dl;
+          group.position.x += dxl * pull;
+          group.position.z += dzl * pull;
+        }
+        const baseY = Math.max(ctx.seaLevel, ctx.terrain.getHeightAt(group.position.x, group.position.z));
+        const targetY = baseY + Math.min(idx, 3) * wrapper.size * 0.3;
+        group.position.y += (targetY - group.position.y) * Math.min(1, dt * 2);
+      }
+      // 领队打鼾（仅成堆时）；非领队/单独睡则确保不响
+      const amLeader = pileSize > 1 && leader === wrapper;
+      if (amLeader && !wrapper._snoring) { ctx.audio?.startSnore?.(wrapper.object3d.id); wrapper._snoring = true; }
+      else if (!amLeader && wrapper._snoring) { ctx.audio?.stopSnore?.(wrapper.object3d.id); wrapper._snoring = false; }
+      sleepMarker.scale.setScalar(Math.min(1.5, 1 + (pileSize - 1) * 0.18)); // 堆越大 💤 越大
       group.scale.y = visualScale * (1 + Math.sin(ctx.time * 1.6) * 0.03);
       for (let i = 0; i < 3; i++) {
         const k = (ctx.time * 0.4 + i / 3) % 1;
@@ -1277,6 +1375,37 @@ export function createDinosaur(species, saved = null, opts = {}) {
     }
 
     wrapper.lifeState = 'wandering';
+    // 偶发打嗝：安静漫步时冷不丁「嗝」一下小跳，纯俏皮
+    if (hiccupTimer <= 0 && emoteTime < 0) {
+      hiccupTimer = 25 + Math.random() * 55;
+      wrapper.startEmote('hiccup', ctx);
+    }
+    // 跟随领队：宝宝就近认一只成年同类当领队，落后了就一路小跑追上去 → 肉眼可见的跟随队列
+    if (age < WEAN_AGE) {
+      if (wrapper._leader && (!wrapper._leader.alive || wrapper._leader.consumed)) wrapper._leader = null;
+      wrapper._leaderScan = (wrapper._leaderScan || 0) - dt;
+      if (!wrapper._leader && wrapper._leaderScan <= 0) {
+        wrapper._leaderScan = 1.5;
+        let best = null, bd = 144; // 12u 内找最近的成年同类
+        for (const e of ctx.entities) {
+          if (e === wrapper || !e.isDinosaur || !e.alive || e.consumed || e.flying || e.swimming) continue;
+          if (e.species !== species || e.size < config.baseSize * 0.95) continue;
+          const dx = e.object3d.position.x - group.position.x;
+          const dz = e.object3d.position.z - group.position.z;
+          const d2 = dx * dx + dz * dz;
+          if (d2 < bd) { bd = d2; best = e; }
+        }
+        wrapper._leader = best;
+      }
+      if (wrapper._leader) {
+        const lp = wrapper._leader.object3d.position;
+        if (Math.hypot(lp.x - group.position.x, lp.z - group.position.z) > 3.5) {
+          wanderTarget = { x: lp.x, z: lp.z }; // 落后了 → 直接追领队
+        }
+      }
+    } else {
+      wrapper._leader = null; // 断奶后独立
+    }
     if (
       wrapper._waterBlocked ||
       Math.hypot(wanderTarget.x - group.position.x, wanderTarget.z - group.position.z) < 0.8

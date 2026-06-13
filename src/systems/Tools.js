@@ -39,6 +39,7 @@ export const ACTIONS = [
 // 🌈 彩虹无 unlock 字段 = 始终可用
 export const MAGIC_ACTIONS = [
   { id: 'rainbow', icon: '🌈', label: 'action.rainbow' },
+  { id: 'whistle', icon: '🎶', label: 'action.whistle' },
   { id: 'flowerRain', icon: '🌸', label: 'action.flowerRain', unlock: 'event.flowerRain' },
   { id: 'meteor', icon: '🌠', label: 'action.meteor', unlock: 'event.meteor' },
   { id: 'aurora', icon: '🌌', label: 'action.aurora', unlock: 'event.aurora' },

@@ -567,6 +567,22 @@ function onAction(id) {
     audio.playWhoosh();
   } else if (id === 'rainbow') {
     weather.showRainbow(audio);
+  } else if (id === 'whistle') {
+    // 吹哨召唤：地面恐龙聚向当前镜头中心，最多的那种叫一声应答
+    audio.playWhistle();
+    const counts = {};
+    for (const e of entities) {
+      if (e.isDinosaur && e.alive && !e.consumed && !e.flying && !e.swimming) {
+        counts[e.species] = (counts[e.species] || 0) + 1;
+      }
+    }
+    let top = null, max = 0;
+    for (const sp in counts) if (counts[sp] > max) { max = counts[sp]; top = sp; }
+    if (top) audio.playCry(top);
+    const tgt = stage.controls.target;
+    ctx.gatherTo = { x: tgt.x, z: tgt.z };
+    ctx.gatherUntil = ctx.time + 8;
+    bus.emit('whistle', { species: top, count: max });
   } else if (EVENT_IDS.has(id)) {
     worldEvents.trigger(id, audio);
   } else if (id === 'pedia') {
@@ -656,6 +672,8 @@ const ctx = {
   hatchEgg,
   spawnPoop,
   time: 0,
+  gatherTo: null,   // 吹哨集合点 {x,z}（瞬时；恐龙在 gatherUntil 前聚向它）
+  gatherUntil: 0,   // 集合截止的 ctx.time
 };
 const clock = new Clock(timeOfDay); // 左下角卡通时钟（表盘 + 数字）
 const frameClock = new THREE.Clock();
