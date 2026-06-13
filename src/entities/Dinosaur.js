@@ -849,6 +849,7 @@ export function createDinosaur(species, saved = null, opts = {}) {
     if (!wrapper.alive || wrapper.consumed) return;
     emoteKind = type;
     if (!wrapper.flying && HOP_EMOTES.has(type)) emoteTime = 0; // 仅这几种做小跳
+    if (hybrid && HOP_EMOTES.has(type)) hybrid.react('Jump');  // 模型物种：开心地骨骼跳一下
     if (type === 'yawn') ctx?.audio?.playYawn?.();
     else if (type === 'hiccup') ctx?.audio?.playHiccup?.();
     else if (type === 'startled') { ctx?.audio?.playStartle?.(); nodTime = 0.3; } // 受惊：快速低头一缩
@@ -970,7 +971,7 @@ export function createDinosaur(species, saved = null, opts = {}) {
   wrapper.update = (dt, ctx) => {
     if (!wrapper.alive) return;
     age += dt;
-    if (hybrid) hybrid.update(dt); // 骨骼动画每帧推进（须在各种早退之前）
+    if (hybrid) hybrid.update(dt, wrapper.lifeState); // 骨骼动画每帧推进（须在各种早退之前）
     // 挠痒进度衰减：2.5s 不挠就忘掉连击数
     if (wrapper._tickleDecay > 0) {
       wrapper._tickleDecay -= dt;
@@ -1572,6 +1573,7 @@ export function createDinosaur(species, saved = null, opts = {}) {
         ctx.audio.playEat();
         ctx.bus.emit('eat', { species, diet: wrapper.diet });
         wrapper.startEmote('eat', ctx);
+        if (hybrid && wrapper.diet === 'carnivore') hybrid.react('Attack'); // 模型食肉龙：捕食咬一口
       }
       return;
     }
