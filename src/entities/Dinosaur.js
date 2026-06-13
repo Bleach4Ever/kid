@@ -123,6 +123,22 @@ const SPECIES = {
     diet: 'herbivore', baseSize: 0.7, speed: 1.4,
     body: '#cbb07a', accent: '#f0e0b0', rarity: 'uncommon',
   },
+  pteranodon: {
+    diet: 'none', baseSize: 1.0, speed: 0.6,
+    body: '#c98a5a', accent: '#ffe0b0', flying: true, rarity: 'uncommon',
+  },
+  plesiosaurus: {
+    diet: 'none', baseSize: 1.1, speed: 0.85,
+    body: '#5aa9a0', accent: '#bfeee8', swimming: true, rarity: 'uncommon',
+  },
+  amargasaurus: {
+    diet: 'herbivore', baseSize: 1.2, speed: 1.0,
+    body: '#9d7fc4', accent: '#e0d0f0', rarity: 'uncommon',
+  },
+  pachyrhinosaurus: {
+    diet: 'herbivore', baseSize: 1.05, speed: 1.25,
+    body: '#b58b6a', accent: '#ecd6bc', rarity: 'uncommon',
+  },
 };
 
 function material(color) {
@@ -313,6 +329,93 @@ function buildProtoceratops(bodyMat, accentMat) {
   addEyes(head, 0.08, 0.32, 0.18, 0.055);
   addLegs(g, bodyMat, [[-0.3, -0.34], [0.3, -0.34], [-0.3, 0.36], [0.3, 0.36]], 0.5, 0.1);
   addTail(g, bodyMat, [0, 0.6, -0.9], 0.85, 0.2);
+  return { group: g, stepParts: [] };
+}
+
+// 无齿翼龙：更大翼展 + 招牌后掠大头冠 + 长喙。复用翼龙飞行 AI（须返回 wings/catch）
+function buildPteranodon(bodyMat, accentMat) {
+  const g = new THREE.Group();
+  mesh(new THREE.IcosahedronGeometry(0.36, 1), bodyMat, g, [0, 0, 0], [0.85, 0.6, 1.25]);
+  const head = mesh(new THREE.IcosahedronGeometry(0.22, 1), bodyMat, g, [0, 0.1, 0.55], [0.8, 0.7, 1.1]);
+  const beak = mesh(new THREE.ConeGeometry(0.09, 0.82, 6), accentMat, g, [0, 0.04, 1.12]);
+  beak.rotation.x = Math.PI / 2;
+  const crest = mesh(new THREE.ConeGeometry(0.13, 0.72, 4), accentMat, g, [0, 0.32, 0.2]); // 后掠大冠
+  crest.rotation.x = 1.95;
+  addEyes(head, 0.09, 0.18, 0.13, 0.045);
+  const wings = [];
+  for (const side of [-1, 1]) {
+    const wing = mesh(new THREE.ConeGeometry(1.15, 2.1, 3), accentMat, g, [side * 0.9, 0, -0.05]);
+    wing.rotation.z = side * Math.PI / 2;
+    wing.rotation.y = side * 0.22;
+    wings.push(wing);
+  }
+  addTail(g, bodyMat, [0, 0, -0.68], 0.5, 0.1);
+  const caught = mesh(new THREE.IcosahedronGeometry(0.12, 1), catchFishMat, g, [0, -0.12, 1.2], [0.7, 0.7, 1.5]);
+  caught.visible = false;
+  return { group: g, wings, catch: caught, stepParts: [] };
+}
+
+// 蛇颈龙：招牌长脖 + 小头 + 四鳍 + 短尾。复用沧龙游泳 AI（须返回 flippers）
+function buildPlesiosaurus(bodyMat, accentMat) {
+  const g = new THREE.Group();
+  mesh(new THREE.IcosahedronGeometry(0.6, 1), bodyMat, g, [0, 0.55, 0], [0.95, 0.78, 1.4]);
+  const neck = mesh(new THREE.CylinderGeometry(0.14, 0.22, 1.5, 7), bodyMat, g, [0, 0.95, 0.9]);
+  neck.rotation.x = -0.7;
+  const head = mesh(new THREE.IcosahedronGeometry(0.2, 1), bodyMat, g, [0, 1.45, 1.55], [0.9, 0.8, 1.2]);
+  const snout = mesh(new THREE.ConeGeometry(0.1, 0.3, 6), accentMat, g, [0, 1.42, 1.78]);
+  snout.rotation.x = Math.PI / 2;
+  addEyes(head, 0.06, 0.16, 0.12, 0.045);
+  const flippers = [];
+  for (const side of [-1, 1]) {
+    for (const z of [0.5, -0.4]) {
+      const flipper = mesh(new THREE.ConeGeometry(0.15, 0.62, 4), accentMat, g, [side * 0.5, 0.42, z]);
+      flipper.rotation.z = side * (Math.PI / 2 + 0.3);
+      flippers.push(flipper);
+    }
+  }
+  addTail(g, bodyMat, [0, 0.55, -1.1], 0.95, 0.18);
+  return { group: g, flippers, stepParts: [] };
+}
+
+// 阿马加龙：脖背一排朝后的高神经棘，长颈龙里最「带刺」的剪影
+function buildAmargasaurus(bodyMat, accentMat) {
+  const g = new THREE.Group();
+  mesh(new THREE.IcosahedronGeometry(0.62, 1), bodyMat, g, [0, 1.0, -0.1], [1, 0.78, 1.5]);
+  const neck = mesh(new THREE.CylinderGeometry(0.16, 0.3, 1.7, 7), bodyMat, g, [0, 1.5, 0.65]);
+  neck.rotation.x = -0.62;
+  const head = mesh(new THREE.IcosahedronGeometry(0.24, 1), bodyMat, g, [0, 2.05, 1.3], [0.9, 0.75, 1.2]);
+  addEyes(head, 0.06, 0.2, 0.13, 0.05);
+  for (let i = 0; i < 7; i++) { // 一排高神经棘，沿脖背朝后斜立
+    const t = i / 6;
+    const ny = lerp(1.55, 1.95, t), nz = lerp(1.05, -0.2, t);
+    const h = 0.55 - t * 0.25;
+    for (const side of [-1, 1]) {
+      const spine = mesh(new THREE.ConeGeometry(0.05, h, 5), accentMat, g, [side * 0.1, ny + h * 0.35, nz]);
+      spine.rotation.x = -0.9;
+    }
+  }
+  addLegs(g, bodyMat, [[-0.4, -0.55], [0.4, -0.55], [-0.4, 0.42], [0.4, 0.42]], 0.95, 0.14);
+  addTail(g, bodyMat, [0, 1.0, -1.5], 1.8, 0.24);
+  return { group: g, stepParts: [] };
+}
+
+// 厚鼻龙：角龙家族，鼻上一块厚实圆鼻瘤（不是角）+ 颈盾两个朝前小钩
+function buildPachyrhinosaurus(bodyMat, accentMat) {
+  const g = new THREE.Group();
+  mesh(new THREE.IcosahedronGeometry(0.7, 1), bodyMat, g, [0, 0.9, 0], [1, 0.72, 1.35]);
+  const head = mesh(new THREE.IcosahedronGeometry(0.48, 1), bodyMat, g, [0, 0.92, 0.88], [1, 0.85, 1.05]);
+  mesh(new THREE.ConeGeometry(0.66, 0.35, 8), accentMat, g, [0, 1.15, 0.62], [1, 1, 0.7]).rotation.x = Math.PI / 2;
+  mesh(new THREE.IcosahedronGeometry(0.22, 1), accentMat, g, [0, 1.02, 1.28], [1.1, 0.7, 0.95]); // 鼻瘤 boss
+  for (const side of [-1, 1]) { // 颈盾朝前小钩
+    const hook = mesh(new THREE.ConeGeometry(0.07, 0.3, 6), toothMat, g, [side * 0.3, 1.32, 0.5]);
+    hook.rotation.x = 0.6;
+    hook.rotation.z = side * 0.2;
+  }
+  const beak = mesh(new THREE.ConeGeometry(0.13, 0.28, 6), eyeMat, g, [0, 0.82, 1.46]);
+  beak.rotation.x = Math.PI / 2;
+  addEyes(head, 0.13, 0.4, 0.22);
+  addLegs(g, bodyMat, [[-0.42, -0.48], [0.42, -0.48], [-0.42, 0.5], [0.42, 0.5]]);
+  addTail(g, bodyMat, [0, 0.86, -1.2], 1.15, 0.25);
   return { group: g, stepParts: [] };
 }
 
@@ -636,6 +739,10 @@ function buildModel(species, config, variant) {
   if (species === 'iguanodon') return buildIguanodon(bodyMat, accentMat);
   if (species === 'baryonyx') return buildPredator(bodyMat, accentMat, false, { fangs: true, longSnout: true, bigClaw: true });
   if (species === 'protoceratops') return buildProtoceratops(bodyMat, accentMat);
+  if (species === 'pteranodon') return buildPteranodon(bodyMat, accentMat);
+  if (species === 'plesiosaurus') return buildPlesiosaurus(bodyMat, accentMat);
+  if (species === 'amargasaurus') return buildAmargasaurus(bodyMat, accentMat);
+  if (species === 'pachyrhinosaurus') return buildPachyrhinosaurus(bodyMat, accentMat);
   return buildPterosaur(bodyMat, accentMat);
 }
 

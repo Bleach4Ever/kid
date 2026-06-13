@@ -71,6 +71,10 @@ const CRIES = {
     a._tone(500, 0.14, { type: 'square', peak: 0.07, slideTo: 380 });
     a._tone(430, 0.14, { type: 'square', peak: 0.06, when: 0.16, slideTo: 520 });
   },
+  pteranodon: (a) => a._tone(950, 0.45, { type: 'sawtooth', peak: 0.045, slideTo: 1400, echo: true }), // 比翼龙更低沉的尖唳
+  plesiosaurus: (a) => a._tone(260, 0.5, { type: 'sine', peak: 0.12, slideTo: 150, echo: true }), // 低沉绵长的水声
+  amargasaurus: (a) => a._tone(180, 0.48, { type: 'sine', peak: 0.13, slideTo: 130 }),
+  pachyrhinosaurus: (a) => a._tone(230, 0.34, { type: 'square', peak: 0.08, slideTo: 160 }),
 };
 
 export class Audio {
