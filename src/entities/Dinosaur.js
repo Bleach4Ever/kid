@@ -1006,6 +1006,32 @@ export function createDinosaur(species, saved = null, opts = {}) {
       }
     }
 
+    // 追泡泡：附近有低空泡泡就跑去顶破（玩耍，优先于觅食/漫步；飞行/游泳/睡觉不参与）
+    if (
+      ctx.bubbleUntil && ctx.time < ctx.bubbleUntil &&
+      !wrapper.flying && !wrapper.swimming && wrapper.lifeState !== 'sleeping'
+    ) {
+      let bub = null, bd = 36; // 6u 内
+      for (const e of ctx.entities) {
+        if (!e.isBubble || !e.alive || e.consumed) continue;
+        if (e.object3d.position.y - group.position.y > wrapper.size * 2.6) continue; // 太高够不着，随它飘走
+        const dx = e.object3d.position.x - group.position.x;
+        const dz = e.object3d.position.z - group.position.z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < bd) { bd = d2; bub = e; }
+      }
+      if (bub) {
+        wrapper.lifeState = 'playing';
+        wrapper.target = null;
+        alertMarker.visible = false;
+        const d = moveToward({ x: bub.object3d.position.x, z: bub.object3d.position.z }, dt, ctx.terrain, 1.5);
+        if (d <= Math.max(0.8, wrapper.size * 0.85) && bub.consume(ctx.removeEntity)) {
+          wrapper.startEmote('pet', ctx); // 顶破了开心一下
+        }
+        return;
+      }
+    }
+
     if (wrapper.flying) {
       const p = group.position;
       const flap = Math.sin(ctx.time * 8) * 0.65;

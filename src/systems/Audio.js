@@ -227,6 +227,11 @@ export class Audio {
     this._tone(620, 0.16, { type: 'triangle', peak: 0.18, slideTo: 200, echo: true });
   }
 
+  // 泡泡破裂：极短促的「啵」
+  playPop() {
+    this._tone(820, 0.05, { type: 'sine', peak: 0.16, slideTo: 380 });
+  }
+
   playSparkle() {
     const notes = [523.25, 659.25, 783.99, 1046.5];
     notes.forEach((f, i) =>

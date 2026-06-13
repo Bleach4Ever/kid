@@ -98,22 +98,30 @@ function buildFlowerArchetype(idx) {
 const TREE_GEOS = Array.from({ length: 8 }, buildTreeArchetype);
 const FLOWER_GEOS = Array.from({ length: 6 }, (_, i) => buildFlowerArchetype(i));
 
-// 给任何 object3d 加一个“从地里蹦出来”的生长动画包装
-function grow(object3d, kind, base = 1) {
+// 给任何 object3d 加一个“从地里蹦出来”的生长动画包装。
+// bloomAmp>0（花）：长好后据 ctx.bloom 缓动开合（仅缩放，不碰共享材质，保持合批省 draw call）。
+function grow(object3d, kind, base = 1, bloomAmp = 0) {
   object3d.scale.setScalar(0.001);
   let t = 0;
   const dur = 0.55;
   let currentScale = 0.001;
+  let bloomCur = bloomAmp ? 1 : 0; // 开局晴天，花就是开的
   const wrapper = {
     object3d,
     kind,
     alive: true,
     consumed: false,
-    update(dt) {
-      if (t >= dur) return;
-      t = Math.min(dur, t + dt);
-      currentScale = Math.max(0.001, easeOutBack(t / dur)) * base;
-      object3d.scale.setScalar(currentScale);
+    update(dt, ctx) {
+      if (t < dur) {
+        t = Math.min(dur, t + dt);
+        currentScale = Math.max(0.001, easeOutBack(t / dur)) * base;
+        object3d.scale.setScalar(currentScale);
+        return;
+      }
+      if (bloomAmp) {
+        bloomCur += ((ctx?.bloom ?? 1) - bloomCur) * Math.min(1, dt * 0.5);
+        object3d.scale.setScalar(base * (1 + bloomCur * bloomAmp));
+      }
     },
     consume(removeEntity) {
       if (!wrapper.alive || wrapper.consumed) return false;
@@ -143,5 +151,5 @@ export function createTree() {
 export function createFlower() {
   const mesh = new THREE.Mesh(pick(FLOWER_GEOS), flowerMat);
   mesh.rotation.y = Math.random() * Math.PI * 2;
-  return grow(mesh, 'flower', 0.9 + Math.random() * 0.5);
+  return grow(mesh, 'flower', 0.9 + Math.random() * 0.5, 0.28); // 好天气里开放（缩放 +28%）
 }

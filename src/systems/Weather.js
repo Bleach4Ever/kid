@@ -121,6 +121,7 @@ export class Weather {
     else this.audio?.stopRain();
     if (cfg.showbow) this.rainbowT = Math.max(this.rainbowT, this.dur);
     if (cfg.lightning) this._lightningT = 0.8 + Math.random() * 1.4;
+    this.bus?.emit('weather', { state }); // 花朵据此在好天气里开放
   }
 
   // 选下一个状态，套用守卫：雾只在清晨 5-8 点；夜里把雷暴降级成小雨

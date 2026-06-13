@@ -24,6 +24,7 @@ import { initLang, t, setLang, getLang, onLangChange, applyDom } from './i18n.js
 import { profile } from './systems/Profile.js';
 import { Unlocks } from './systems/Unlocks.js';
 import { createTree, createFlower } from './entities/Tree.js';
+import { createBubble } from './entities/Bubble.js';
 import { createDinosaur, SPECIES } from './entities/Dinosaur.js';
 import { createEgg, createNest as createNestEntity, createPoop, createMysteryEgg } from './entities/Ecosystem.js';
 import { rollVariant, VARIANTS } from './entities/Variants.js';
@@ -229,6 +230,23 @@ function placeEntity(point, kind) {
     particles.burst({ x: point.x, y: y + 0.5, z: point.z }, {
       count: 10, colors: ['#8fdf7a', '#bce98c', '#6fc96b'], speed: 1.6, gravity: 4, life: 0.7, size: 0.16,
     });
+  } else if (kind === 'bubble') {
+    // 泡泡棒：冒出 3 颗泡泡，缓缓升起（恐龙会跑来顶破）。LIMITS.bubble 自动控量。
+    const groundY = Math.max(SEA_LEVEL, terrain.getHeightAt(point.x, point.z));
+    for (let i = 0; i < 3; i++) {
+      const ox = (Math.random() - 0.5) * 1.0;
+      const oz = (Math.random() - 0.5) * 1.0;
+      const bubble = createBubble((pos) => {
+        audio.playPop();
+        particles.burst({ x: pos.x, y: pos.y, z: pos.z }, {
+          count: 7, colors: ['#ffffff', '#cdeeff', '#ffd3e2'], speed: 1.5, gravity: -0.3, life: 0.7, size: 0.13,
+        });
+      });
+      addEntity(bubble, new THREE.Vector3(point.x + ox, groundY + 0.5, point.z + oz));
+    }
+    audio.playSparkle();
+    ctx.bubbleUntil = ctx.time + 4.5;
+    return; // 泡泡不发 'place' 事件（不计入图鉴/里程碑）
   } else {
     // 硬上限：活恐龙到顶 → 轻 squeak + 计数标签抖动，拒绝放置
     if (aliveDinoCount() >= quality.dinoCap) {
@@ -529,6 +547,11 @@ bus.on('skyphase', ({ phase }) => {
   audio.setMood(phase);
 });
 
+// 天气切换：晴天/彩虹时花朵开放（ctx.bloom→1），阴雨时合拢（→0）。花朵每帧读 ctx.bloom 缓动缩放。
+bus.on('weather', ({ state }) => {
+  ctx.bloom = (state === 'clear' || state === 'rainbow') ? 1 : 0;
+});
+
 // 世界事件需要夜空时（流星雨/极光）：直接把时间跳到夜里并直达夜空
 function ensureNight() {
   if (timeOfDay.getPhase() !== 'night') {
@@ -674,6 +697,8 @@ const ctx = {
   time: 0,
   gatherTo: null,   // 吹哨集合点 {x,z}（瞬时；恐龙在 gatherUntil 前聚向它）
   gatherUntil: 0,   // 集合截止的 ctx.time
+  bloom: 1,         // 花朵开放度（晴/彩虹=1，阴雨=0），花朵据此缓动开合
+  bubbleUntil: 0,   // 有泡泡在场的截止 ctx.time（恐龙只在此前扫描追泡泡，省性能）
 };
 const clock = new Clock(timeOfDay); // 左下角卡通时钟（表盘 + 数字）
 const frameClock = new THREE.Clock();
@@ -707,6 +732,7 @@ function maintainPredators(dt) {
   bus.emit('place', { kind: 'mosasaurus' }); // 标记图鉴「👀 见过沧龙」
 }
 
+let fireflyTimer = 0; // 黄昏/夜晚萤火虫投放节拍
 function loop() {
   // 上下文丢失期间跳过整帧（含渲染），rAF 不断 → restored 后下一帧自动继续
   if (!paused) {
@@ -720,6 +746,24 @@ function loop() {
     weather.update(dt, ctx);
     clock.update();
     worldEvents.update(dt);
+    // 黄昏/夜晚：陆地上空缓缓升起一群萤火虫（复用粒子池，随天黑自然消退）
+    if (gameStarted && (ctx.skyPhase === 'sunset' || ctx.skyPhase === 'night')) {
+      fireflyTimer -= dt;
+      if (fireflyTimer <= 0) {
+        fireflyTimer = 0.5;
+        for (let i = 0; i < 6; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = Math.sqrt(Math.random()) * WORLD_SIZE * 0.42;
+          const x = Math.cos(a) * r, z = Math.sin(a) * r;
+          const gy = terrain.getHeightAt(x, z);
+          if (gy < SEA_LEVEL + 0.1) continue; // 只在陆地上空，不在海上
+          particles.burst({ x, y: gy + 0.6 + Math.random() * 1.4, z }, {
+            count: 1, colors: ['#c8ff7f', '#e8ffb3', '#fff1a8'],
+            speed: 0.35, gravity: -0.15, life: 4, size: 0.07,
+          });
+        }
+      }
+    }
     if (gameStarted) mysteryEggs.update(dt); // 开始页期间不投放神秘蛋
     if (gameStarted) seaLife.update(dt); // 开始页期间不刷海洋生物
     if (gameStarted) maintainPredators(dt); // 翼龙多了就召唤沧龙天敌
