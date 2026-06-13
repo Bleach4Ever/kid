@@ -16,6 +16,7 @@ import { Toolbar } from './ui/Toolbar.js';
 import { Pedia } from './ui/Pedia.js';
 import { Settings } from './ui/Settings.js';
 import { Tutorial } from './ui/Tutorial.js';
+import { HungerBubble } from './ui/HungerBubble.js';
 import { Quests } from './systems/Quests.js';
 import { encodeHeightsI16, decodeHeightsI16 } from './systems/Storage.js';
 import { loadSave, clearSave, serializeWorld, hasSave } from './systems/SaveGame.js';
@@ -31,7 +32,8 @@ import { SeaLife } from './systems/SeaLife.js';
 import { SEA_BUILDERS, SEABED_KINDS, deepWaterTarget } from './entities/SeaCreatures.js';
 import { TimeOfDay } from './systems/TimeOfDay.js';
 import { Clock } from './ui/Clock.js';
-import { LIMITS, SEA_LEVEL } from './constants.js';
+import { LIMITS, SEA_LEVEL, WORLD_SIZE } from './constants.js';
+import { clamp } from './utils.js';
 
 // ---------------- 语言（先于一切 UI） ----------------
 initLang();
@@ -258,16 +260,37 @@ function groundPosition(x, z) {
   return new THREE.Vector3(x, Math.max(SEA_LEVEL, terrain.getHeightAt(x, z)), z);
 }
 
+const NEST_BOUND = WORLD_SIZE * 0.46; // 与恐龙活动范围一致，巢不放在地图边缘外
+function isNestLand(x, z) {
+  return terrain.getHeightAt(x, z) > SEA_LEVEL + 0.1;
+}
+
+// 巢必须筑在陆地上（绝不在水里）：偏好点 → 逐步扩大半径随机找陆地 → 兜底全图粗扫最近陆地
 function createNest(species, preferred) {
   let x = preferred.x;
   let z = preferred.z;
-  for (let i = 0; i < 10; i++) {
-    const candidateX = i === 0 ? x : x + (Math.random() - 0.5) * 10;
-    const candidateZ = i === 0 ? z : z + (Math.random() - 0.5) * 10;
-    if (terrain.getHeightAt(candidateX, candidateZ) > SEA_LEVEL + 0.1) {
-      x = candidateX;
-      z = candidateZ;
-      break;
+  let found = isNestLand(x, z);
+  for (let i = 0; !found && i < 24; i++) {
+    const radius = 3 + i * 1.5;
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.random() * radius;
+    const cx = clamp(preferred.x + Math.cos(a) * r, -NEST_BOUND, NEST_BOUND);
+    const cz = clamp(preferred.z + Math.sin(a) * r, -NEST_BOUND, NEST_BOUND);
+    if (isNestLand(cx, cz)) {
+      x = cx;
+      z = cz;
+      found = true;
+    }
+  }
+  if (!found) {
+    // 兜底：整图粗扫，挑离偏好点最近的一块陆地
+    let bestD = Infinity;
+    for (let gx = -NEST_BOUND; gx <= NEST_BOUND; gx += 4) {
+      for (let gz = -NEST_BOUND; gz <= NEST_BOUND; gz += 4) {
+        if (!isNestLand(gx, gz)) continue;
+        const d = (gx - preferred.x) ** 2 + (gz - preferred.z) ** 2;
+        if (d < bestD) { bestD = d; x = gx; z = gz; }
+      }
     }
   }
   const nest = createNestEntity(species);
@@ -462,6 +485,8 @@ document.addEventListener('visibilitychange', () => {
 });
 window.addEventListener('pagehide', saveWorld);
 
+const hungerBubble = new HungerBubble(); // 点恐龙 → 头顶冒出肚子条（饥饿度）
+
 let lastSculptEmit = -Infinity;
 const actions = {
   sculpt: (point, dir) => {
@@ -473,7 +498,11 @@ const actions = {
     }
   },
   place: placeEntity,
-  pet: (entity) => entity.pet?.(ctx),
+  pet: (entity) => {
+    entity.pet?.(ctx);
+    if (entity.isDinosaur && entity.getHunger)
+      hungerBubble.show(entity, (e) => e.feed?.(ctx)); // 头顶泡泡，饿了可手动喂
+  },
 };
 
 // ---------------- 输入 ----------------
@@ -485,10 +514,10 @@ const input = new Input({
   water,
   tools,
   actions,
-  // pointerdown 时构建一次可点目标列表；空中翼龙 v1 不可摸；
+  // pointerdown 时构建一次可点目标列表；空中翼龙不可摸，落地夜栖（perched）的可摸醒；
   // 神秘蛋（点一下 = 开启）与海洋生物（点一下 = 可爱反应）也算可点目标
   getPetTargets: () => entities
-    .filter((e) => ((e.isDinosaur && !e.flying) || e.isMysteryEgg || e.isSeaLife) && e.alive && !e.consumed)
+    .filter((e) => ((e.isDinosaur && (!e.flying || e.perched)) || e.isMysteryEgg || e.isSeaLife) && e.alive && !e.consumed)
     .map((e) => e.object3d),
 });
 
@@ -631,6 +660,35 @@ const ctx = {
 const clock = new Clock(timeOfDay); // 左下角卡通时钟（表盘 + 数字）
 const frameClock = new THREE.Clock();
 
+// 生态保障：翼龙变多且有深水时，自动游来一只沧龙当天敌（翼龙唯一的天敌）。
+// 节流到 ~3s 一次；沧龙的 breach 会捕食低空俯冲的翼龙，配合翼龙繁殖软上限抑制无限增长。
+const PTEROSAUR_PRESSURE = 4; // 翼龙达到此数量才召唤天敌
+const MOSA_CAP = 1; // 同时最多自动生成的沧龙数
+let predatorTimer = 4;
+function maintainPredators(dt) {
+  predatorTimer -= dt;
+  if (predatorTimer > 0) return;
+  predatorTimer = 3;
+  let pteros = 0;
+  let mosas = 0;
+  for (const e of entities) {
+    if (!e.alive || e.consumed) continue;
+    if (e.species === 'pterosaur') pteros++;
+    else if (e.species === 'mosasaurus') mosas++;
+  }
+  if (pteros < PTEROSAUR_PRESSURE || mosas >= MOSA_CAP) return;
+  if (aliveDinoCount() >= quality.dinoCap) return;
+  const point = deepWaterTarget(terrain);
+  if (!point) return; // 没深水：没法游进来
+  const w = createDinosaur('mosasaurus');
+  addEntity(w, new THREE.Vector3(point.x, SEA_LEVEL, point.z));
+  audio.playSplash();
+  particles.burst({ x: point.x, y: SEA_LEVEL + 0.2, z: point.z }, {
+    count: 16, colors: ['#bfeaff', '#ffffff', '#9fd8f5'], speed: 2.6, gravity: 9, life: 0.6, size: 0.16,
+  });
+  bus.emit('place', { kind: 'mosasaurus' }); // 标记图鉴「👀 见过沧龙」
+}
+
 function loop() {
   // 上下文丢失期间跳过整帧（含渲染），rAF 不断 → restored 后下一帧自动继续
   if (!paused) {
@@ -646,9 +704,11 @@ function loop() {
     worldEvents.update(dt);
     if (gameStarted) mysteryEggs.update(dt); // 开始页期间不投放神秘蛋
     if (gameStarted) seaLife.update(dt); // 开始页期间不刷海洋生物
+    if (gameStarted) maintainPredators(dt); // 翼龙多了就召唤沧龙天敌
     particles.update(dt);
     for (const e of entities) e.update(dt, ctx);
     flushRemovals();
+    hungerBubble.update(stage.camera, stage.renderer.domElement); // 头顶肚子条贴住被点恐龙
     quality.noteFrame(dt); // auto 档持续卡顿 → 静默降级
     stage.updateCamera(dt); // 键盘/边缘平移 + 旋转，须在 render() 里的 controls.update() 之前
     stage.render();

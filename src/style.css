@@ -1072,6 +1072,131 @@ body {
   }
 }
 
+/* 头顶小肚子条：点恐龙时冒出，贴在它头顶（坐标由 JS 投影写入 left/top） */
+.hunger-bubble {
+  position: fixed;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -100%);
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 2px solid #fff;
+  border-radius: 20px;
+  box-shadow: 0 0 0 2px var(--candy-blue), 0 6px 16px var(--shadow);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease;
+}
+
+/* 表情行 */
+.hunger-bubble .mood-emoji {
+  font-size: 26px;
+  line-height: 1;
+  transition: filter 0.3s;
+}
+
+/* pip 行横排 */
+.hunger-bubble .pips {
+  display: flex;
+  gap: 2px;
+}
+
+/* 饥饿主题：边框变红（静态兜底） */
+.hunger-bubble.hungry {
+  box-shadow: 0 0 0 2px #f45, 0 6px 16px var(--shadow);
+}
+
+/* 饥饿 + 显示：弹出动画 + 边框脉冲呼吸，营造「快喂我」的紧迫感。
+   组合选择器优先级(0,3,0)高于 .show，确保脉冲不被 bubble-pop 覆盖 */
+.hunger-bubble.show.hungry {
+  animation: bubble-pop 0.35s cubic-bezier(0.18, 1.4, 0.4, 1), hungry-pulse 0.7s ease-in-out infinite;
+}
+
+@keyframes hungry-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px #f45, 0 6px 16px var(--shadow); }
+  50% { box-shadow: 0 0 10px 3px #f66, 0 6px 16px var(--shadow); }
+}
+
+/* 睡觉主题：边框变蓝紫 */
+.hunger-bubble.sleepy {
+  box-shadow: 0 0 0 2px #9b8ee8, 0 6px 16px var(--shadow);
+}
+
+/* 满足主题：边框变绿 */
+.hunger-bubble.happy {
+  box-shadow: 0 0 0 2px #5cbf6a, 0 6px 16px var(--shadow);
+}
+
+/* 喂食按钮 */
+.hunger-bubble .feed-btn {
+  font-size: 26px;
+  line-height: 1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 12px;
+  transition: transform 0.15s, background 0.15s;
+  animation: feed-bounce 0.9s ease-in-out infinite;
+}
+
+.hunger-bubble .feed-btn:hover,
+.hunger-bubble .feed-btn:active {
+  background: rgba(255, 100, 80, 0.12);
+  transform: scale(1.25);
+}
+
+@keyframes feed-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+.hunger-bubble.show {
+  opacity: 1;
+  visibility: visible;
+  animation: bubble-pop 0.35s cubic-bezier(0.18, 1.4, 0.4, 1);
+}
+
+.hunger-bubble .pip {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.hunger-bubble .pip:not(.fish) {
+  filter: saturate(1.1);
+}
+
+.hunger-bubble.hungry .pip {
+  animation: hungry-blink 0.8s ease-in-out infinite;
+}
+
+@keyframes bubble-pop {
+  from {
+    transform: translate(-50%, -100%) scale(0.6);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, -100%) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes hungry-blink {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 @media (max-width: 560px) {
   .pedia-grid {
     grid-template-columns: repeat(2, 1fr);

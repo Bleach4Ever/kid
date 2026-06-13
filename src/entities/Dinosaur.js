@@ -4,7 +4,17 @@ import { clamp, easeOutBack, lerp, TAU } from '../utils.js';
 import { VARIANTS } from './Variants.js';
 
 const BOUND = WORLD_SIZE * 0.46;
+const MOUNTAIN_H = SEA_LEVEL + 3; // 翼龙夜栖偏好的「高山」高度门槛（约 3.6）
+const PTEROSAUR_SOFT_CAP = 6; // 翼龙繁殖软上限：同物种到此数量就不再产蛋（生态保障）
+const SATIATION_MAX = 48; // 饱腹满格对应的 hungerTimer 上限（用于换算头顶肚子条的 0~1 饱度）
+// 成长：宝宝 → 巨兽（戏剧性反差，喂食为主驱动；上界收口避免无限长大）
+const BABY_SCALE = 0.45;   // 出生尺寸（占成年比例）
+const MAX_GROWTH = 2.2;    // 成长上限（相对成年）
+const GROW_SECONDS = 90;   // 仅靠年龄长到成年所需秒数（更长一点，肉眼可见）
+const FEED_GROWTH = 0.12;  // 手动喂一口的成长量（主推手）
+const EAT_GROWTH = 0.05;   // 自动觅食一餐的成长量（次要）
 const eyeMat = new THREE.MeshStandardMaterial({ color: '#30283a', roughness: 0.7 });
+const eyeShineMat = new THREE.MeshBasicMaterial({ color: '#ffffff' }); // 眼睛高光小点，整体更萌
 const toothMat = new THREE.MeshStandardMaterial({ color: '#fff8df', flatShading: true });
 const catchFishMat = new THREE.MeshStandardMaterial({ color: '#ff9e6b', flatShading: true, roughness: 0.7 });
 const zzzMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85, depthTest: false });
@@ -19,11 +29,11 @@ const SPECIES = {
   },
   brachiosaurus: {
     diet: 'herbivore', baseSize: 1.3, speed: 1.05,
-    body: '#67b9a6', accent: '#a9e0cc', rarity: 'common',
+    body: '#67b9a6', accent: '#a9e0cc', rarity: 'uncommon',
   },
   stegosaurus: {
     diet: 'herbivore', baseSize: 1.05, speed: 1.25,
-    body: '#e4ad59', accent: '#ffdf7e', rarity: 'common',
+    body: '#e4ad59', accent: '#ffdf7e', rarity: 'uncommon',
   },
   trex: {
     diet: 'carnivore', baseSize: 1.2, speed: 1.65,
@@ -31,11 +41,11 @@ const SPECIES = {
   },
   raptor: {
     diet: 'carnivore', baseSize: 0.72, speed: 2.35,
-    body: '#9a79d1', accent: '#d2b8ff', rarity: 'common',
+    body: '#9a79d1', accent: '#d2b8ff', rarity: 'uncommon',
   },
   oviraptor: {
     diet: 'egg', baseSize: 0.76, speed: 2.1,
-    body: '#e58d45', accent: '#ffe080', rarity: 'common',
+    body: '#e58d45', accent: '#ffe080', rarity: 'uncommon',
   },
   pterosaur: {
     diet: 'none', baseSize: 0.9, speed: 0.65,
@@ -91,6 +101,9 @@ function mesh(geometry, mat, parent, position, scale = [1, 1, 1]) {
 function addEyes(parent, y, z, spread = 0.2, radius = 0.065) {
   for (const side of [-1, 1]) {
     mesh(new THREE.SphereGeometry(radius, 7, 7), eyeMat, parent, [side * spread, y, z]);
+    // 高光小点：偏前上外侧，给眼神一点灵动
+    mesh(new THREE.SphereGeometry(radius * 0.4, 5, 4), eyeShineMat, parent,
+      [side * spread + radius * 0.32, y + radius * 0.35, z + radius * 0.55]);
   }
 }
 
@@ -102,6 +115,8 @@ function addLegs(group, mat, positions, height = 0.7, radius = 0.12) {
       group,
       [x, height / 2, z]
     );
+    // 髋关节圆润收口：腿顶一颗小球，所有四足龙瞬间更精致
+    mesh(new THREE.SphereGeometry(radius * 1.15, 6, 5), mat, group, [x, height, z]);
   }
 }
 
@@ -122,6 +137,16 @@ function buildTriceratops(bodyMat, accentMat) {
   }
   const noseHorn = mesh(new THREE.ConeGeometry(0.065, 0.38, 7), toothMat, g, [0, 0.96, 1.38]);
   noseHorn.rotation.x = Math.PI / 2;
+  // 喙：深色尖钩嘴
+  const beak = mesh(new THREE.ConeGeometry(0.13, 0.28, 6), eyeMat, g, [0, 0.82, 1.46]);
+  beak.rotation.x = Math.PI / 2;
+  // 颈盾边缘扇贝：5 颗小锥沿盾顶弧线，颈盾更有「招牌」轮廓
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 4 - 0.5) * 1.7;
+    const bump = mesh(new THREE.ConeGeometry(0.08, 0.2, 5), accentMat, g, [Math.sin(a) * 0.66, 1.15 + Math.cos(a) * 0.16, 0.46]);
+    bump.rotation.z = -a;
+    bump.rotation.x = Math.PI / 2;
+  }
   addEyes(head, 0.13, 0.4, 0.22);
   addLegs(g, bodyMat, [[-0.42, -0.48], [0.42, -0.48], [-0.42, 0.5], [0.42, 0.5]]);
   addTail(g, bodyMat, [0, 0.86, -1.2], 1.15, 0.25);
@@ -145,17 +170,27 @@ function buildStegosaurus(bodyMat, accentMat) {
   mesh(new THREE.IcosahedronGeometry(0.72, 1), bodyMat, g, [0, 0.9, -0.05], [1, 0.72, 1.5]);
   const head = mesh(new THREE.IcosahedronGeometry(0.32, 1), bodyMat, g, [0, 0.73, 1.12], [0.9, 0.78, 1.2]);
   addEyes(head, 0.1, 0.29, 0.16, 0.05);
-  for (let i = 0; i < 6; i++) {
-    const z = -0.85 + i * 0.34;
-    const plate = mesh(new THREE.ConeGeometry(0.24, 0.62, 4), accentMat, g, [0, 1.5, z]);
+  // 背板：左右错位 + 中背更大，比单排同尺寸更立体好看
+  for (let i = 0; i < 7; i++) {
+    const z = -0.9 + i * 0.32;
+    const t = Math.sin((i / 6) * Math.PI);
+    const h = 0.4 + t * 0.45;
+    const r = 0.17 + t * 0.13;
+    const plate = mesh(new THREE.ConeGeometry(r, h, 4), accentMat, g, [(i % 2 ? 0.1 : -0.1), 1.4 + h * 0.2, z]);
     plate.rotation.y = Math.PI / 4;
   }
   addLegs(g, bodyMat, [[-0.42, -0.52], [0.42, -0.52], [-0.42, 0.55], [0.42, 0.55]], 0.65);
   addTail(g, bodyMat, [0, 0.92, -1.35], 1.35, 0.26);
+  // 尾刺 thagomizer：尾端 4 根朝后上的钉，剑龙的招牌武器
+  for (const [sx, rz] of [[-0.16, -0.5], [0.16, 0.5], [-0.06, -0.18], [0.06, 0.18]]) {
+    const spike = mesh(new THREE.ConeGeometry(0.06, 0.5, 5), toothMat, g, [sx, 1.0, -1.98]);
+    spike.rotation.x = -Math.PI / 2.4;
+    spike.rotation.z = rz;
+  }
   return { group: g, stepParts: [] };
 }
 
-function buildPredator(bodyMat, accentMat, small) {
+function buildPredator(bodyMat, accentMat, small, opts = {}) {
   const g = new THREE.Group();
   const bodyY = small ? 0.8 : 1.05;
   mesh(new THREE.IcosahedronGeometry(0.62, 1), bodyMat, g, [0, bodyY, 0], [0.9, 0.72, 1.45]);
@@ -169,17 +204,41 @@ function buildPredator(bodyMat, accentMat, small) {
   const jaw = mesh(new THREE.BoxGeometry(small ? 0.42 : 0.58, 0.18, 0.55), accentMat, g, [0, bodyY + 0.12, 1.2]);
   jaw.rotation.x = 0.08;
   addEyes(head, 0.14, small ? 0.28 : 0.4, small ? 0.18 : 0.24);
+  // 凶猛猎手专属（仅食肉龙）：上颌白牙 + 眉脊，让霸王龙/迅猛龙更有气势
+  if (opts.fangs) {
+    const n = small ? 3 : 4;
+    for (let i = 0; i < n; i++) {
+      const tx = (i / (n - 1) - 0.5) * (small ? 0.32 : 0.46);
+      const tooth = mesh(new THREE.ConeGeometry(0.035, 0.13, 4), toothMat, g, [tx, bodyY + 0.02, small ? 1.18 : 1.32]);
+      tooth.rotation.x = Math.PI; // 朝下
+    }
+    for (const side of [-1, 1]) {
+      const brow = mesh(new THREE.ConeGeometry(0.07, 0.16, 4), bodyMat, head,
+        [side * (small ? 0.22 : 0.3), 0.24, small ? 0.2 : 0.28]);
+      brow.rotation.x = -0.6;
+    }
+  }
   const legs = [];
   for (const side of [-1, 1]) {
-    const leg = mesh(
-      new THREE.CylinderGeometry(0.1, 0.14, small ? 0.75 : 0.95, 6),
-      bodyMat,
-      g,
-      [side * 0.34, (small ? 0.75 : 0.95) / 2, -0.1]
-    );
+    const legH = small ? 0.75 : 0.95;
+    const leg = mesh(new THREE.CylinderGeometry(0.1, 0.14, legH, 6), bodyMat, g, [side * 0.34, legH / 2, -0.1]);
     legs.push(leg);
+    mesh(new THREE.SphereGeometry(0.13, 6, 5), bodyMat, g, [side * 0.34, legH, -0.1]); // 髋关节圆润收口
+    // 三趾脚爪（挂在腿上，随行走摆动）
+    for (const tz of [0.06, 0.18]) {
+      const toe = mesh(new THREE.ConeGeometry(0.05, 0.16, 4), toothMat, leg, [0, -legH / 2 + 0.02, tz]);
+      toe.rotation.x = Math.PI / 2;
+    }
+    if (opts.sickle) { // 迅猛龙标志性镰刀趾爪
+      const sickle = mesh(new THREE.ConeGeometry(0.045, 0.26, 5), toothMat, leg, [0, -legH / 2 + 0.14, 0.16]);
+      sickle.rotation.x = -0.9;
+    }
     const arm = mesh(new THREE.CylinderGeometry(0.045, 0.06, small ? 0.38 : 0.3, 5), bodyMat, g, [side * 0.38, bodyY + 0.05, 0.52]);
     arm.rotation.z = side * 0.55;
+    if (opts.fangs) { // 小手爪
+      const claw = mesh(new THREE.ConeGeometry(0.03, 0.12, 4), toothMat, g, [side * 0.46, bodyY - 0.08, 0.62]);
+      claw.rotation.x = Math.PI / 2;
+    }
   }
   addTail(g, bodyMat, [0, bodyY, -1.25], small ? 1.45 : 1.8, small ? 0.22 : 0.3);
   return { group: g, stepParts: legs };
@@ -266,7 +325,7 @@ function buildPachycephalosaurus(bodyMat, accentMat) {
 
 // 双冠龙：小型猎手 + 头顶两片立起的半圆冠
 function buildDilophosaurus(bodyMat, accentMat) {
-  const model = buildPredator(bodyMat, accentMat, true);
+  const model = buildPredator(bodyMat, accentMat, true, { fangs: true });
   const g = model.group;
   for (const side of [-1, 1]) {
     const crest = mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.05, 8), accentMat, g, [side * 0.09, 1.34, 0.92]);
@@ -292,7 +351,7 @@ function buildDiplodocus(bodyMat, accentMat) {
 
 // 棘龙：大型猎手 + 5 片扁锥背帆 + 鳄鱼长吻
 function buildSpinosaurus(bodyMat, accentMat) {
-  const model = buildPredator(bodyMat, accentMat, false);
+  const model = buildPredator(bodyMat, accentMat, false, { fangs: true });
   const g = model.group;
   for (let i = 0; i < 5; i++) {
     const h = 0.5 + Math.sin((i / 4) * Math.PI) * 0.38;
@@ -383,8 +442,8 @@ function buildModel(species, config, variant) {
   if (species === 'triceratops') return buildTriceratops(bodyMat, accentMat);
   if (species === 'brachiosaurus') return buildBrachiosaurus(bodyMat, accentMat);
   if (species === 'stegosaurus') return buildStegosaurus(bodyMat, accentMat);
-  if (species === 'trex') return buildPredator(bodyMat, accentMat, false);
-  if (species === 'raptor') return buildPredator(bodyMat, accentMat, true);
+  if (species === 'trex') return buildPredator(bodyMat, accentMat, false, { fangs: true });
+  if (species === 'raptor') return buildPredator(bodyMat, accentMat, true, { fangs: true, sickle: true });
   if (species === 'oviraptor') return buildOviraptor(bodyMat, accentMat);
   if (species === 'ankylosaurus') return buildAnkylosaurus(bodyMat, accentMat);
   if (species === 'parasaurolophus') return buildParasaurolophus(bodyMat, accentMat);
@@ -410,10 +469,12 @@ function nearestFood(self, entities) {
     if (entity === self || !entity.alive || entity.consumed) continue;
     if (self.diet === 'herbivore' && entity.kind !== 'tree' && entity.kind !== 'flower') continue;
     if (self.diet === 'carnivore') {
-      // 飞行/游泳的恐龙不在地面猎手的菜单上
+      // 飞行/游泳的恐龙不在地面猎手的菜单上；同物种不互吃（别吃自己的孩子/同类）
       if (!entity.isDinosaur || entity.flying || entity.swimming || entity.size >= self.size * 0.8) continue;
+      if (entity.species === self.species) continue;
     }
-    if (self.diet === 'egg' && !entity.isEgg) continue;
+    // 食蛋龙不吃自己物种的蛋（别吃自己的孩子）
+    if (self.diet === 'egg' && (!entity.isEgg || entity.species === self.species)) continue;
     if (self.diet === 'none') continue;
     const distance = self.object3d.position.distanceToSquared(entity.object3d.position);
     if (distance < bestDistance) {
@@ -479,10 +540,10 @@ export function createDinosaur(species, saved = null, opts = {}) {
     variant,
     alive: true,
     consumed: false,
-    size: config.baseSize * 0.65,
+    size: config.baseSize * BABY_SCALE,
     hungerTimer: config.diet === 'none'
       ? Infinity
-      : Number.isFinite(saved?.hunger) ? saved.hunger : 3 + Math.random() * 5,
+      : Number.isFinite(saved?.hunger) ? saved.hunger : 10 + Math.random() * 10,
     target: null,
     // 必须恢复 eggTimer，否则读档后全体恐龙同时产蛋
     eggTimer: Number.isFinite(saved?.egg) ? saved.egg : 35 + Math.random() * 25,
@@ -490,6 +551,7 @@ export function createDinosaur(species, saved = null, opts = {}) {
     lifeState: 'wandering',
     nestTarget: null,
     diving: false, // 翼龙正在低空俯冲捕鱼（供沧龙判定是否跃出捕食）
+    perched: false, // 翼龙夜里落地栖息中（落地可被点击抚摸）
   };
 
   let age = Number.isFinite(saved?.age) ? saved.age : 0;
@@ -499,12 +561,14 @@ export function createDinosaur(species, saved = null, opts = {}) {
   let wanderTarget = diskTarget();
   let retargetTimer = 0;
   let walkTime = Math.random() * TAU;
+  const breathePhase = Math.random() * TAU; // 呼吸微动相位，避免全体同步起伏
   let flightAngle = Math.random() * TAU;
   let layingTime = 0;
   const flightRadius = 8 + Math.random() * 13;
   const flightHeight = 6 + Math.random() * 5;
-  // 翼龙捕鱼状态机：soaring 盘旋 / diving 俯冲扎水 / rising 叼鱼爬升
+  // 翼龙捕鱼状态机：soaring 盘旋 / diving 俯冲扎水 / rising 叼鱼爬升 / toRoost 飞向夜栖点 / roosting 落地睡觉
   let flyState = 'soaring';
+  let roostTarget = null; // 夜栖目标（高山或就近陆地），入夜时锁定一次
   let huntCooldown = 2 + Math.random() * 4; // 开局较快就去捕一次鱼，让玩家尽早看到
   let diveT = 0;
   let diveDur = 1;
@@ -531,8 +595,12 @@ export function createDinosaur(species, saved = null, opts = {}) {
   let raisedEmitted = age >= 60; // 读档的成年龙不再重复发 raised
 
   function growthFactor() {
-    return Math.max(0.65, lerp(0.65, 1, Math.min(1, age / 60)) + foodGrowth);
+    // 年龄把宝宝带到成年(1.0)；喂食/进食的 foodGrowth 再往上推，上界收口到 MAX_GROWTH
+    const ageF = lerp(BABY_SCALE, 1, Math.min(1, age / GROW_SECONDS));
+    return Math.min(MAX_GROWTH, ageF + foodGrowth);
   }
+  // 成长阶段：0 幼年 / 1 成年(≥1.0×) / 2 巨型(≥1.6×)。按初始体型起算，避免出生/读档瞬间误触发「砰」
+  let growthStage = growthFactor() >= 1.6 ? 2 : growthFactor() >= 1 ? 1 : 0;
 
   // 在 (cx,cz) 周围找一块陆地（高于海平面）。最多采样 8 次；周围全是水就退回中心点，绝不返回水点。
   function landSpotNear(terrain, cx, cz, radius) {
@@ -564,6 +632,19 @@ export function createDinosaur(species, saved = null, opts = {}) {
       if (ctx.terrain.getHeightAt(candidate.x, candidate.z) > SEA_LEVEL + 0.15) return candidate;
     }
     return { x: group.position.x, z: group.position.z }; // 全是水 → 原地不动，绝不走进水里
+  }
+
+  // 翼龙夜栖点：全图采样找最高处，够「高山」就栖在山顶；否则退回就近随机陆地降落
+  function findRoost(ctx) {
+    let best = null;
+    let bestH = -Infinity;
+    for (let i = 0; i < 24; i++) {
+      const c = diskTarget(BOUND);
+      const h = ctx.terrain.getHeightAt(c.x, c.z);
+      if (h > bestH) { bestH = h; best = c; }
+    }
+    if (best && bestH >= MOUNTAIN_H) return best;
+    return chooseLandTarget(ctx); // 没高山：就近找块陆地降落
   }
 
   // 沧龙的游走目标：优先找深水点；整张图没水就退化为陆地慢速漫步（无害）
@@ -663,6 +744,19 @@ export function createDinosaur(species, saved = null, opts = {}) {
 
   function updateReproduction(dt, ctx) {
     if (age < 20 || wrapper.eggTimer > 0) return false;
+    // 夜里翼龙要去高山睡觉，让位给夜栖（由飞行分支接管）
+    if (wrapper.flying && ctx.skyPhase === 'night') return false;
+    // 翼龙繁殖软上限：同物种已经够多就别再产蛋（天敌太少时兜底，避免无限增长）
+    if (wrapper.flying) {
+      let kin = 0;
+      for (const e of ctx.entities) {
+        if (e.isDinosaur && e.alive && !e.consumed && e.species === species) kin++;
+      }
+      if (kin >= PTEROSAUR_SOFT_CAP) {
+        wrapper.eggTimer = 20 + Math.random() * 10; // 稍后再试
+        return false;
+      }
+    }
     if (
       wrapper.nestTarget &&
       (!wrapper.nestTarget.alive || wrapper.nestTarget.egg)
@@ -711,14 +805,18 @@ export function createDinosaur(species, saved = null, opts = {}) {
     return true;
   }
 
-  // 开心 emote：0.9s 抛物线跳 + 落地压缩拉伸 + 爱心粒子
+  // 开心 emote：地面龙 0.9s 抛物线跳 + 落地压扁；飞行龙只迸发粒子（不与飞行高度打架）。
+  // type: 'eat' 暖橙+嫩绿（进食）/ 'pet' 爱心粉（抚摸）。可被重复触发——连点也始终有反馈。
   wrapper.startEmote = (type, ctx) => {
-    if (emoteTime >= 0 || !wrapper.alive || wrapper.consumed || wrapper.flying) return;
-    emoteTime = 0;
+    if (!wrapper.alive || wrapper.consumed) return;
+    if (!wrapper.flying) emoteTime = 0; // 重启小跳；飞行龙保持飞行高度，仅发粒子
     if (ctx?.particles) {
       const p = group.position;
+      const colors = type === 'eat'
+        ? ['#ffd27f', '#ffb35c', '#9be08a']
+        : HEART_COLORS;
       ctx.particles.burst({ x: p.x, y: p.y + wrapper.size * 1.2, z: p.z }, {
-        count: 8, colors: HEART_COLORS, speed: 1.1, gravity: -1.4, life: 0.9, size: 0.2,
+        count: type === 'eat' ? 14 : 10, colors, speed: 1.3, gravity: -1.4, life: 0.95, size: 0.22,
       });
     }
   };
@@ -726,13 +824,37 @@ export function createDinosaur(species, saved = null, opts = {}) {
   // 抚摸：永远开心（4 岁直觉），睡着的会被摸醒
   wrapper.pet = (ctx) => {
     if (!wrapper.alive || wrapper.consumed) return;
-    if (wrapper.lifeState === 'sleeping') {
+    if (wrapper.flying && wrapper.perched) {
+      // 摸醒夜栖的翼龙 → 立刻起飞回到盘旋
+      flyState = 'soaring';
+      wrapper.perched = false;
+      wrapper.lifeState = 'wandering';
+      roostTarget = null;
+      wakeTimer = 20;
+    } else if (wrapper.lifeState === 'sleeping') {
       wrapper.lifeState = 'wandering';
       wakeTimer = 20;
     }
     wrapper.startEmote('pet', ctx);
     ctx.audio.playCry(species);
     ctx.bus.emit('pet', { species });
+  };
+
+  // 手动喂食：玩家点击泡泡上的 🍖 按钮触发。喂食 = 喂饱 + 长大（核心奖励回路）。
+  wrapper.feed = (ctx) => {
+    if (!wrapper.alive || wrapper.consumed || config.diet === 'none') return;
+    wrapper.hungerTimer = SATIATION_MAX; // 一口喂饱，泡泡立刻满格 😊
+    wrapper.mealsEaten++;
+    foodGrowth += FEED_GROWTH;           // 喂养即成长（戏剧性变大的主推手）
+    if (wrapper.lifeState === 'sleeping') { wrapper.lifeState = 'wandering'; wakeTimer = 20; }
+    wrapper.target = null;               // 修：觅食目标字段是 target（原 foodTarget 为空操作）
+    wrapper.startEmote('eat', ctx);
+    ctx.audio.playTreat();               // 专属「好吃!」音效，区别于自动进食
+    ctx.particles.burst(group.position, {
+      count: 22, colors: ['#ff6f9c', '#ff9ec4', '#ffd3e2', '#fff2c0'],
+      gravity: -1.6, life: 1.1, speed: 2.3, size: 0.22,
+    });
+    ctx.bus.emit('feed', { species });
   };
 
   wrapper.update = (dt, ctx) => {
@@ -745,9 +867,23 @@ export function createDinosaur(species, saved = null, opts = {}) {
     wrapper.eggTimer = Math.max(0, wrapper.eggTimer - dt);
     const desiredScale = config.baseSize * growthFactor();
     wrapper.size = desiredScale;
+    // 成长「砰」：跨过成年(1.0×)/巨型(1.6×)阈值时金光 + 音效，让「长大」看得见
+    const gStage = desiredScale >= config.baseSize * 1.6 ? 2 : desiredScale >= config.baseSize ? 1 : 0;
+    if (gStage > growthStage) {
+      growthStage = gStage;
+      if (age > 0.6 && ctx.particles) {
+        const gp = group.position;
+        ctx.particles.burst({ x: gp.x, y: gp.y + wrapper.size, z: gp.z }, {
+          count: 16, colors: ['#ffe08a', '#fff6cf', '#ffd34d'], speed: 1.8, gravity: -1.0, life: 1.0, size: 0.26,
+        });
+        ctx.audio?.playSparkle?.();
+      }
+    }
     const intro = age < 0.45 ? Math.max(0.001, easeOutBack(age / 0.45)) : 1;
     visualScale += (desiredScale * intro - visualScale) * Math.min(1, dt * 5);
-    group.scale.setScalar(visualScale);
+    // 呼吸微动：轻微的整体起伏，让所有恐龙都「活」起来（emote/被吃时各自的分支会覆盖）
+    const breathe = 1 + Math.sin((age + breathePhase) * 2.2) * 0.02;
+    group.scale.setScalar(visualScale * breathe);
     sleepMarker.visible = false;
 
     // sparkle 变体：每 2.5-4s 滴落 3 颗金色微粒（走共享粒子池，开销可忽略）
@@ -809,6 +945,62 @@ export function createDinosaur(species, saved = null, opts = {}) {
     if (wrapper.flying) {
       const p = group.position;
       const flap = Math.sin(ctx.time * 8) * 0.65;
+
+      // ---- 夜栖：天亮起飞复位 / 入夜从盘旋切入飞向夜栖点 ----
+      if ((flyState === 'toRoost' || flyState === 'roosting') && ctx.skyPhase !== 'night') {
+        flyState = 'soaring';
+        wrapper.perched = false;
+        wrapper.lifeState = 'wandering';
+        roostTarget = null;
+      } else if (flyState === 'soaring' && ctx.skyPhase === 'night') {
+        roostTarget = roostTarget || findRoost(ctx);
+        flyState = 'toRoost';
+      }
+
+      // ---- 飞向夜栖点：水平靠拢 + 缓降贴地，收翅准备落地 ----
+      if (flyState === 'toRoost') {
+        const ground = Math.max(SEA_LEVEL, ctx.terrain.getHeightAt(roostTarget.x, roostTarget.z));
+        const landY = ground + wrapper.size * 0.4;
+        const dx = roostTarget.x - p.x;
+        const dz = roostTarget.z - p.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist > 0.05) {
+          const speed = config.speed * 6;
+          p.x += (dx / dist) * speed * dt;
+          p.z += (dz / dist) * speed * dt;
+          group.rotation.y = Math.atan2(dx, dz);
+        }
+        p.y += (landY - p.y) * Math.min(1, dt * 2.5);
+        group.rotation.x = 0;
+        model.wings[0].rotation.x = -0.3;
+        model.wings[1].rotation.x = -0.3;
+        if (dist < 0.4 && Math.abs(p.y - landY) < 0.25) {
+          p.set(roostTarget.x, landY, roostTarget.z);
+          flyState = 'roosting';
+          wrapper.lifeState = 'sleeping';
+          wrapper.perched = true;
+          nodTime = 0;
+          group.rotation.x = 0;
+        }
+        return;
+      }
+
+      // ---- 落地睡觉：折翅贴地，呼吸起伏 + 💤（落地的翼龙可被点击抚摸唤醒）----
+      if (flyState === 'roosting') {
+        const ground = Math.max(SEA_LEVEL, ctx.terrain.getHeightAt(p.x, p.z));
+        p.y = ground + wrapper.size * 0.4;
+        model.wings[0].rotation.x = -0.9;
+        model.wings[1].rotation.x = -0.9;
+        alertMarker.visible = false;
+        sleepMarker.visible = true;
+        group.scale.y = visualScale * (1 + Math.sin(ctx.time * 1.6) * 0.03);
+        for (let i = 0; i < 3; i++) {
+          const k = (ctx.time * 0.4 + i / 3) % 1;
+          sleepMarker.children[i].position.set(Math.sin(k * TAU) * 0.14, k * 1.1, 0);
+          sleepMarker.children[i].scale.setScalar(0.5 + k);
+        }
+        return;
+      }
 
       // ---- 盘旋：偶尔锁定水里的鱼，切入俯冲 ----
       if (flyState === 'soaring') {
@@ -1071,9 +1263,9 @@ export function createDinosaur(species, saved = null, opts = {}) {
             : ['#e3a266', '#c98052', '#f2c98c'],
           speed: 1.6, gravity: 5, life: 0.6, size: 0.14,
         });
-        foodGrowth += 0.05;
+        foodGrowth += EAT_GROWTH;
         wrapper.mealsEaten++;
-        wrapper.hungerTimer = 12 + Math.random() * 8;
+        wrapper.hungerTimer = 34 + Math.random() * 14; // 吃饱后更久才再觅食，别一直在吃
         wrapper.target = null;
         alertMarker.visible = false;
         ctx.spawnPoop(wrapper);
@@ -1093,6 +1285,12 @@ export function createDinosaur(species, saved = null, opts = {}) {
     }
     moveToward(wanderTarget, dt, ctx.terrain);
   };
+
+  // 头顶肚子条读取：dietNone（翼龙/沧龙吃鱼，总是满足）；否则 hungerTimer 换算 0~1 饱度
+  wrapper.getHunger = () => ({
+    dietNone: config.diet === 'none',
+    fullness: config.diet === 'none' ? 1 : clamp(wrapper.hungerTimer / SATIATION_MAX, 0, 1),
+  });
 
   wrapper.getSaveState = () => {
     const r = (v) => Math.round(v * 100) / 100;

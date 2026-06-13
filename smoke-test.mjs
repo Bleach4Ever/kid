@@ -62,7 +62,7 @@ for (const t of ['tree', 'flower']) {
   await page.mouse.click(520, 380);
   await page.waitForTimeout(80);
 }
-// 抽屉初始状态：15 个按钮，6 个锁定剪影（里程碑），2 个隐藏（神秘蛋专属）
+// 抽屉初始状态：15 个按钮，3 个起步可选（三角龙/霸王龙/翼龙），12 个锁定（10 里程碑带提示 + 2 神秘蛋隐藏）
 await page.locator('#toolbar .tool-btn[data-tool="dinos"]').click({ force: true });
 await page.waitForTimeout(350);
 const dinoBarState = await page.evaluate(() => {
@@ -92,7 +92,8 @@ for (const t of dinoBarState.unlockedIds) {
 // 锁定物种绕过 UI 直接放置（引擎层不设限，UI 层才是闸门）
 await page.evaluate(() => {
   const w = window.__world;
-  const locked = ['ankylosaurus', 'parasaurolophus', 'pachycephalosaurus', 'dilophosaurus',
+  const locked = ['stegosaurus', 'brachiosaurus', 'raptor', 'oviraptor',
+    'ankylosaurus', 'parasaurolophus', 'pachycephalosaurus', 'dilophosaurus',
     'diplodocus', 'spinosaurus', 'therizinosaurus', 'mosasaurus'];
   locked.forEach((s, i) => {
     w.placeEntity({ x: 5, z: 5 }, s);
@@ -398,10 +399,36 @@ await page.waitForTimeout(250);
 const petResult = await page.evaluate(() => ({
   lastPet: window.__world.lastPet,
   petDinoAwake: window.__world.__petDino.lifeState !== 'sleeping',
+  hungerBubble: !!document.querySelector('.hunger-bubble.show'), // 点恐龙 → 头顶肚子条冒出
+  bubblePips: document.querySelectorAll('.hunger-bubble .pip').length,
 }));
 
+// ---------------- 翼龙夜栖 + 沧龙天敌（仍在夜晚）----------------
+// 放几只翼龙：夜里它们飞向高山/就近降落睡觉（perched）；翼龙变多 + 有深水 → 自动游来沧龙天敌
+const roostPredator = await page.evaluate(async () => {
+  const w = window.__world;
+  const deep = (() => {
+    for (let x = -40; x <= 40; x += 2) {
+      for (let z = -40; z <= 40; z += 2) {
+        if (w.terrain.getHeightAt(x, z) < w.seaLevel - 0.8) return true;
+      }
+    }
+    return false;
+  })();
+  for (let i = 0; i < 5; i++) w.placeEntity({ x: -8 + i * 3, z: 8 }, 'pterosaur');
+  const deadline = Date.now() + 14000;
+  let perched = false;
+  let mosa = false;
+  while (Date.now() < deadline && !(perched && mosa)) {
+    await new Promise((r) => setTimeout(r, 150));
+    perched = w.entities.some((e) => e.species === 'pterosaur' && e.alive && e.perched);
+    mosa = w.entities.some((e) => e.species === 'mosasaurus' && e.alive);
+  }
+  return { deep, perched, mosa };
+});
+
 // ---------------- 阶段 4：恐龙图鉴 ----------------
-// 清空图鉴 → 只放一只迅猛龙 → 验证 seen 解锁、红点、吐司、模态、跨 reload/重置持久
+// 清空图鉴 → 解锁迅猛龙 → 只放一只 → 验证 seen 解锁、红点、吐司、模态、跨 reload/重置持久
 await page.evaluate(() => {
   const p = JSON.parse(localStorage.getItem('dino-world:profile'));
   p.pedia = {};
@@ -410,6 +437,13 @@ await page.evaluate(() => {
 await page.reload({ waitUntil: 'networkidle' });
 await page.locator('#start-btn').click();
 await page.waitForTimeout(400);
+// 迅猛龙现在靠「喂食×3」里程碑解锁：连发 3 次 feed → 应自动解锁（验证新 fed 计数器 + 里程碑端到端）
+await page.evaluate(() => {
+  for (let i = 0; i < 3; i++) window.__world.bus.emit('feed', { species: 'triceratops' });
+});
+await page.waitForTimeout(150);
+const raptorUnlockedByFeed = await page.evaluate(() =>
+  JSON.parse(localStorage.getItem('dino-world:profile')).unlocks.includes('dino.raptor'));
 // 预设恐龙挪去角落，确保点击落在地形上
 await page.evaluate(() => {
   for (const e of window.__world.entities) {
@@ -877,6 +911,46 @@ const capRestore = await page.evaluate(() => {
   return { cap, alive: w.entities.filter((e) => e.isDinosaur && e.alive).length };
 });
 
+// 同物种不互吃（不吃自己的孩子）：成年霸王龙 + 霸王龙宝宝 + 迅猛龙宝宝叠在一起
+// → 只吃异物种的迅猛龙宝宝，同物种的霸王龙宝宝安然无恙
+const noCannibalism = await page.evaluate(async () => {
+  const w = window.__world;
+  w.restoreWorld({ preset: 'park', skyIndex: 0, entities: [
+    { k: 'dino', s: 'trex', x: 0, z: 0, age: 80, egg: 999, hunger: 0 },
+    { k: 'dino', s: 'trex', x: 0.3, z: 0, age: 0, egg: 999, hunger: 999 },
+    { k: 'dino', s: 'raptor', x: -0.3, z: 0, age: 0, egg: 999, hunger: 999 },
+  ] });
+  const dinos = w.entities.filter((e) => e.isDinosaur);
+  const adult = dinos[0];
+  for (const e of dinos) if (e !== adult) e.object3d.position.copy(adult.object3d.position);
+  adult.hungerTimer = 0;
+  await new Promise((r) => setTimeout(r, 1600));
+  return {
+    babyTrexAlive: w.entities.some((e) => e.species === 'trex' && e.alive && e.size < 0.9),
+    raptorAlive: w.entities.some((e) => e.species === 'raptor' && e.alive),
+  };
+});
+
+// 巢不筑在水里：用一个水里的偏好点建巢 → 巢最终落在陆地上
+const nestLand = await page.evaluate(() => {
+  const w = window.__world;
+  let wx = null;
+  let wz = null;
+  for (let x = -40; x <= 40 && wx === null; x += 2) {
+    for (let z = -40; z <= 40; z += 2) {
+      if (w.terrain.getHeightAt(x, z) < w.seaLevel - 0.8) { wx = x; wz = z; break; }
+    }
+  }
+  if (wx === null) return { found: false };
+  const nest = w.createNest('trex', { x: wx, z: wz });
+  const p = nest.object3d.position;
+  return {
+    found: true,
+    waterPreferred: w.terrain.getHeightAt(wx, wz) < w.seaLevel,
+    nestOnLand: w.terrain.getHeightAt(p.x, p.z) > w.seaLevel,
+  };
+});
+
 // ---------------- 阶段 9：健壮性 + PWA（刻意制造错误的段落必须放在最后） ----------------
 // 此前的完整流程必须零报错；从这里开始的错误是测试自己制造的
 const cleanConsoleErrors = consoleErrors.length;
@@ -966,6 +1040,9 @@ console.log('after restore:', afterRestore);
 console.log('corrupt save state:', corruptState);
 console.log('night sleep:', sleepState);
 console.log('pet click:', petTarget.lastPetBefore, '->', petResult);
+console.log('pterosaur roost + mosasaurus predator:', roostPredator);
+console.log('no cannibalism (same-species safe):', noCannibalism);
+console.log('nest on land (not in water):', nestLand);
 console.log('pedia unlock:', pediaUnlock);
 console.log('pedia modal:', pediaModal);
 console.log('pedia close + place:', beforePlaceCount, '->', afterPlaceCount);
@@ -1046,8 +1123,8 @@ if (!splashHidden || toolCount !== 5 || topCount !== 6) {
   console.error('\n❌ UI not wired correctly');
   process.exit(1);
 }
-if (!dinoBarState.open || dinoBarState.total !== 15 || dinoBarState.locked !== 8 ||
-    dinoBarState.hidden !== 2 || dinoBarState.hints !== 6 || dinoBarState.unlockedIds.length !== 7) {
+if (!dinoBarState.open || dinoBarState.total !== 15 || dinoBarState.locked !== 12 ||
+    dinoBarState.hidden !== 2 || dinoBarState.hints !== 10 || dinoBarState.unlockedIds.length !== 3) {
   console.error('\n❌ dino drawer initial lock state wrong', dinoBarState);
   process.exit(1);
 }
@@ -1134,6 +1211,30 @@ if (petResult.lastPet <= petTarget.lastPetBefore) {
   console.error('\n❌ clicking a dinosaur did not register a pet');
   process.exit(1);
 }
+if (!petResult.hungerBubble || petResult.bubblePips !== 5) {
+  console.error('\n❌ clicking a dinosaur did not show the head-top hunger bubble', petResult);
+  process.exit(1);
+}
+if (!roostPredator.perched) {
+  console.error('\n❌ pterosaurs did not roost (land to sleep) at night', roostPredator);
+  process.exit(1);
+}
+if (roostPredator.deep && !roostPredator.mosa) {
+  console.error('\n❌ mosasaurus predator did not auto-spawn when pterosaurs grew numerous', roostPredator);
+  process.exit(1);
+}
+if (!noCannibalism.babyTrexAlive || noCannibalism.raptorAlive) {
+  console.error('\n❌ carnivore ate its own species (or spared the cross-species prey)', noCannibalism);
+  process.exit(1);
+}
+if (!nestLand.found || !nestLand.waterPreferred || !nestLand.nestOnLand) {
+  console.error('\n❌ nest was built in water instead of on land', nestLand);
+  process.exit(1);
+}
+if (!raptorUnlockedByFeed) {
+  console.error('\n❌ feeding milestone (fed×3) did not unlock raptor');
+  process.exit(1);
+}
 if (!pediaUnlock.raptorSeen || !pediaUnlock.toastShown || !pediaUnlock.badgeOn) {
   console.error('\n❌ pedia unlock (seen/toast/badge) failed');
   process.exit(1);
@@ -1142,8 +1243,8 @@ if (!pediaModal.visible || pediaModal.cards !== 15 || pediaModal.locked !== 14 |
   console.error('\n❌ pedia modal cards/silhouettes/badge state wrong');
   process.exit(1);
 }
-if (pediaModal.rare !== 3 || pediaModal.uncommon !== 5 || pediaModal.meterChips !== 3 ||
-    !pediaModal.progressBar || pediaModal.hints !== 8 || pediaModal.mysteryCards !== 2 ||
+if (pediaModal.rare !== 3 || pediaModal.uncommon !== 9 || pediaModal.meterChips !== 3 ||
+    !pediaModal.progressBar || pediaModal.hints !== 11 || pediaModal.mysteryCards !== 2 ||
     pediaModal.swatchDots !== 4) {
   console.error('\n❌ pedia collection UI (rarity/meter/hints/swatches) wrong', pediaModal);
   process.exit(1);

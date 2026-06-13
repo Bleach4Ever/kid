@@ -314,6 +314,14 @@ export class Audio {
     this._tone(460, 0.1, { type: 'sine', peak: 0.08, when: 0.09, slideTo: 320 });
   }
 
+  // 手动投喂专属「好吃!」：两声上行 + 高音铃，比自动进食的 playEat 更欢快、更有「我喂的」奖励感
+  playTreat() {
+    if (!this._cryOk()) return;
+    this._tone(523.25, 0.1, { type: 'triangle', peak: 0.13, slideTo: 784 });
+    this._tone(659.25, 0.12, { type: 'sine', peak: 0.11, when: 0.1, slideTo: 988, echo: true });
+    this._tone(1046.5, 0.18, { type: 'sine', peak: 0.07, when: 0.2, echo: true });
+  }
+
   _cryOk() {
     if (!this.ctx) return false;
     const now = this.ctx.currentTime;

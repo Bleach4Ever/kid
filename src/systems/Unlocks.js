@@ -6,8 +6,14 @@ import { profile } from './Profile.js';
 import { showToast } from '../ui/Toast.js';
 import { t } from '../i18n.js';
 
-// counter 对应 profile.counters 字段；hint 是锁定按钮上的无字提示角标
+// counter 对应 profile.counters 字段；hint 是锁定按钮上的无字提示角标。
+// 排成「楼梯」：开局只有 三角龙/霸王龙/翼龙，其余靠玩法陆续解锁——
+// 前 4 条极易达成（摸/孵/摆/喂），开局几分钟内逐个点亮，自带庆祝吐司。
 export const SPECIES_MILESTONES = [
+  { species: 'stegosaurus', counter: 'pet', need: 3, hint: '💗' },
+  { species: 'oviraptor', counter: 'hatched', need: 2, hint: '🐣' },
+  { species: 'brachiosaurus', counter: 'placed', need: 4, hint: '🦕' },
+  { species: 'raptor', counter: 'fed', need: 3, hint: '🍖' }, // 顺带引导新的喂食玩法
   { species: 'ankylosaurus', counter: 'raisedHerb', need: 3, hint: '🌿' },
   { species: 'dilophosaurus', counter: 'raisedCarn', need: 2, hint: '🍖' },
   { species: 'parasaurolophus', counter: 'hatched', need: 5, hint: '🐣' },
@@ -47,6 +53,8 @@ export class Unlocks {
       this.unlock(species); // 孵出即拥有
     });
     bus.on('pet', () => this._bump('pet'));
+    bus.on('place', ({ kind }) => { if (SPECIES[kind]) this._bump('placed'); });
+    bus.on('feed', () => this._bump('fed'));
   }
 
   _bump(key) {
