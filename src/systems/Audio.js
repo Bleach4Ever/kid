@@ -61,6 +61,16 @@ const CRIES = {
     a._tone(1200, 0.07, { type: 'sine', peak: 0.05, slideTo: 1700 });
     a._tone(1500, 0.06, { type: 'sine', peak: 0.04, when: 0.08, slideTo: 1900 });
   },
+  kentrosaurus: (a) => a._tone(280, 0.3, { type: 'triangle', peak: 0.1, slideTo: 200 }),
+  iguanodon: (a) => a._tone(330, 0.4, { type: 'sawtooth', peak: 0.07, slideTo: 240, echo: true }),
+  baryonyx: (a) => { // 低吼 + 一记咬合脆响
+    a._tone(200, 0.34, { type: 'sawtooth', peak: 0.11, slideTo: 120 });
+    a._tone(680, 0.09, { type: 'sawtooth', peak: 0.04, when: 0.3, slideTo: 380 });
+  },
+  protoceratops: (a) => { // 憨憨的小叫两声
+    a._tone(500, 0.14, { type: 'square', peak: 0.07, slideTo: 380 });
+    a._tone(430, 0.14, { type: 'square', peak: 0.06, when: 0.16, slideTo: 520 });
+  },
 };
 
 export class Audio {

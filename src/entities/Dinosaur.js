@@ -107,6 +107,22 @@ const SPECIES = {
     diet: 'carnivore', baseSize: 0.55, speed: 2.6,
     body: '#8fce6f', accent: '#ffe27a', rarity: 'uncommon',
   },
+  kentrosaurus: {
+    diet: 'herbivore', baseSize: 0.95, speed: 1.2,
+    body: '#a0884e', accent: '#e8d39a', rarity: 'uncommon',
+  },
+  iguanodon: {
+    diet: 'herbivore', baseSize: 1.1, speed: 1.35,
+    body: '#8bbf8a', accent: '#d6efc0', rarity: 'uncommon',
+  },
+  baryonyx: {
+    diet: 'carnivore', baseSize: 1.05, speed: 1.7,
+    body: '#5f93b0', accent: '#bfe0ef', rarity: 'uncommon',
+  },
+  protoceratops: {
+    diet: 'herbivore', baseSize: 0.7, speed: 1.4,
+    body: '#cbb07a', accent: '#f0e0b0', rarity: 'uncommon',
+  },
 };
 
 function material(color) {
@@ -227,6 +243,79 @@ function buildStyracosaurus(bodyMat, accentMat) {
   return { group: g, stepParts: [] };
 }
 
+// 钉状龙：剑龙近亲，背上成对尖刺（越往尾越长）+ 招牌大肩刺
+function buildKentrosaurus(bodyMat, accentMat) {
+  const g = new THREE.Group();
+  mesh(new THREE.IcosahedronGeometry(0.66, 1), bodyMat, g, [0, 0.85, -0.05], [1, 0.7, 1.5]);
+  const head = mesh(new THREE.IcosahedronGeometry(0.3, 1), bodyMat, g, [0, 0.68, 1.08], [0.9, 0.78, 1.2]);
+  addEyes(head, 0.1, 0.27, 0.15, 0.05);
+  for (let i = 0; i < 6; i++) {
+    const z = -0.85 + i * 0.34;
+    const h = 0.35 + (i / 5) * 0.4; // 越往尾越长
+    for (const side of [-1, 1]) {
+      const spike = mesh(new THREE.ConeGeometry(0.08, h, 5), toothMat, g, [side * 0.12, 1.22 + h * 0.3, z]);
+      spike.rotation.z = side * 0.35;
+    }
+  }
+  for (const side of [-1, 1]) { // 大肩刺
+    const sh = mesh(new THREE.ConeGeometry(0.1, 0.7, 6), toothMat, g, [side * 0.5, 1.0, 0.1]);
+    sh.rotation.z = side * (Math.PI / 2.2);
+  }
+  addLegs(g, bodyMat, [[-0.4, -0.5], [0.4, -0.5], [-0.4, 0.5], [0.4, 0.5]], 0.6);
+  addTail(g, bodyMat, [0, 0.88, -1.3], 1.3, 0.22);
+  return { group: g, stepParts: [] };
+}
+
+// 禽龙：壮实的半直立食草龙，小头喙嘴 + 招牌拇指尖刺
+function buildIguanodon(bodyMat, accentMat) {
+  const g = new THREE.Group();
+  const bodyY = 1.0;
+  mesh(new THREE.IcosahedronGeometry(0.58, 1), bodyMat, g, [0, bodyY, 0], [0.95, 0.95, 1.4]);
+  const neck = mesh(new THREE.CylinderGeometry(0.16, 0.24, 0.6, 6), bodyMat, g, [0, bodyY + 0.5, 0.4]);
+  neck.rotation.x = 0.5;
+  const head = mesh(new THREE.IcosahedronGeometry(0.26, 1), bodyMat, g, [0, bodyY + 0.85, 0.62], [1, 0.85, 1.2]);
+  const beak = mesh(new THREE.ConeGeometry(0.12, 0.24, 6), accentMat, g, [0, bodyY + 0.78, 0.86]);
+  beak.rotation.x = Math.PI / 2;
+  addEyes(head, 0.08, 0.2, 0.16, 0.055);
+  const legs = [];
+  for (const side of [-1, 1]) {
+    const legH = 0.95;
+    const leg = mesh(new THREE.CylinderGeometry(0.13, 0.17, legH, 6), bodyMat, g, [side * 0.3, legH / 2, -0.15]);
+    legs.push(leg);
+    mesh(new THREE.SphereGeometry(0.16, 6, 5), bodyMat, g, [side * 0.3, legH, -0.15]);
+    for (const tz of [0.06, 0.2]) {
+      const toe = mesh(new THREE.ConeGeometry(0.06, 0.16, 4), accentMat, leg, [0, -legH / 2 + 0.02, tz]);
+      toe.rotation.x = Math.PI / 2;
+    }
+    const arm = mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.4, 5), bodyMat, g, [side * 0.34, bodyY + 0.02, 0.42]);
+    arm.rotation.z = side * 0.5;
+    const thumb = mesh(new THREE.ConeGeometry(0.04, 0.18, 4), toothMat, g, [side * 0.46, bodyY - 0.12, 0.5]);
+    thumb.rotation.x = -0.4;
+  }
+  addTail(g, bodyMat, [0, bodyY, -1.0], 1.5, 0.26);
+  return { group: g, stepParts: legs };
+}
+
+// 原角龙：迷你无角的角龙，小颈盾 + 鹦鹉喙，憨憨的
+function buildProtoceratops(bodyMat, accentMat) {
+  const g = new THREE.Group();
+  mesh(new THREE.IcosahedronGeometry(0.5, 1), bodyMat, g, [0, 0.62, 0], [1, 0.78, 1.35]);
+  const head = mesh(new THREE.IcosahedronGeometry(0.34, 1), bodyMat, g, [0, 0.66, 0.66], [1, 0.9, 1.1]);
+  mesh(new THREE.ConeGeometry(0.42, 0.22, 8), accentMat, g, [0, 0.86, 0.45], [1, 1, 0.55]).rotation.x = Math.PI / 2;
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 4 - 0.5) * 1.5;
+    const bump = mesh(new THREE.ConeGeometry(0.05, 0.13, 5), accentMat, g, [Math.sin(a) * 0.42, 0.86 + Math.cos(a) * 0.12, 0.36]);
+    bump.rotation.z = -a;
+    bump.rotation.x = Math.PI / 2;
+  }
+  const beak = mesh(new THREE.ConeGeometry(0.11, 0.22, 6), eyeMat, g, [0, 0.56, 1.0]);
+  beak.rotation.x = Math.PI / 2;
+  addEyes(head, 0.08, 0.32, 0.18, 0.055);
+  addLegs(g, bodyMat, [[-0.3, -0.34], [0.3, -0.34], [-0.3, 0.36], [0.3, 0.36]], 0.5, 0.1);
+  addTail(g, bodyMat, [0, 0.6, -0.9], 0.85, 0.2);
+  return { group: g, stepParts: [] };
+}
+
 function buildBrachiosaurus(bodyMat, accentMat) {
   const g = new THREE.Group();
   mesh(new THREE.IcosahedronGeometry(0.72, 1), bodyMat, g, [0, 1.1, -0.2], [1, 0.78, 1.45]);
@@ -277,6 +366,10 @@ function buildPredator(bodyMat, accentMat, small, opts = {}) {
   );
   const jaw = mesh(new THREE.BoxGeometry(small ? 0.42 : 0.58, 0.18, 0.55), accentMat, g, [0, bodyY + 0.12, 1.2]);
   jaw.rotation.x = 0.08;
+  if (opts.longSnout) { // 重爪龙的鳄鱼长吻：往前接一段窄长口鼻
+    mesh(new THREE.BoxGeometry(0.26, 0.2, 0.6), bodyMat, g, [0, bodyY + 0.24, 1.55]);
+    mesh(new THREE.BoxGeometry(0.22, 0.12, 0.52), accentMat, g, [0, bodyY + 0.12, 1.6]);
+  }
   addEyes(head, 0.14, small ? 0.28 : 0.4, small ? 0.18 : 0.24);
   // 凶猛猎手专属（仅食肉龙）：上颌白牙 + 眉脊，让霸王龙/迅猛龙更有气势
   if (opts.fangs) {
@@ -316,8 +409,9 @@ function buildPredator(bodyMat, accentMat, small, opts = {}) {
     }
     const arm = mesh(new THREE.CylinderGeometry(0.045, 0.06, small ? 0.38 : 0.3, 5), bodyMat, g, [side * 0.38, bodyY + 0.05, 0.52]);
     arm.rotation.z = side * 0.55;
-    if (opts.fangs) { // 小手爪
-      const claw = mesh(new THREE.ConeGeometry(0.03, 0.12, 4), toothMat, g, [side * 0.46, bodyY - 0.08, 0.62]);
+    if (opts.fangs) { // 小手爪（重爪龙的拇指巨爪加大）
+      const cs = opts.bigClaw ? 2.1 : 1;
+      const claw = mesh(new THREE.ConeGeometry(0.03 * cs, 0.12 * cs, 4), toothMat, g, [side * 0.46, bodyY - 0.08, 0.62]);
       claw.rotation.x = Math.PI / 2;
     }
   }
@@ -538,6 +632,10 @@ function buildModel(species, config, variant) {
   if (species === 'compsognathus') return buildPredator(bodyMat, accentMat, true);
   if (species === 'gallimimus') return buildGallimimus(bodyMat, accentMat);
   if (species === 'styracosaurus') return buildStyracosaurus(bodyMat, accentMat);
+  if (species === 'kentrosaurus') return buildKentrosaurus(bodyMat, accentMat);
+  if (species === 'iguanodon') return buildIguanodon(bodyMat, accentMat);
+  if (species === 'baryonyx') return buildPredator(bodyMat, accentMat, false, { fangs: true, longSnout: true, bigClaw: true });
+  if (species === 'protoceratops') return buildProtoceratops(bodyMat, accentMat);
   return buildPterosaur(bodyMat, accentMat);
 }
 

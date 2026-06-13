@@ -25,6 +25,11 @@ export const SPECIES_MILESTONES = [
   { species: 'compsognathus', counter: 'hatched', need: 8, hint: '🐣' },
   { species: 'carnotaurus', counter: 'raisedCarn', need: 8, hint: '🍖' },
   { species: 'gallimimus', counter: 'raisedHerb', need: 12, hint: '🌿' },
+  // 第二批：更靠后的收集目标
+  { species: 'protoceratops', counter: 'hatched', need: 12, hint: '🐣' },
+  { species: 'kentrosaurus', counter: 'raisedHerb', need: 16, hint: '🌿' },
+  { species: 'baryonyx', counter: 'raisedCarn', need: 12, hint: '🍖' },
+  { species: 'iguanodon', counter: 'placed', need: 16, hint: '🦕' },
 ];
 
 const HINTS = Object.fromEntries(SPECIES_MILESTONES.map((m) => [m.species, m.hint]));
