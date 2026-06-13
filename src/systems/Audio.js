@@ -232,6 +232,12 @@ export class Audio {
     this._tone(820, 0.05, { type: 'sine', peak: 0.16, slideTo: 380 });
   }
 
+  // 啃零食球：两声短促低沉的「咔嗯」
+  playCrunch() {
+    this._tone(190, 0.07, { type: 'square', peak: 0.09, slideTo: 120 });
+    this._tone(150, 0.07, { type: 'triangle', peak: 0.07, when: 0.06, slideTo: 90 });
+  }
+
   // 挠痒咯咯笑：一串短促上扬的三角音（big=笑到打转，更长更欢）
   playGiggle(big = false) {
     if (!this._cryOk()) return;

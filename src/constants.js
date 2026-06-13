@@ -15,6 +15,7 @@ export const LIMITS = {
   tree: 120,
   flower: 160,
   bubble: 24,
+  treat: 10,
   poop: 80,
   fish: 6,
   jelly: 6,

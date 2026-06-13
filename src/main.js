@@ -25,6 +25,7 @@ import { profile } from './systems/Profile.js';
 import { Unlocks } from './systems/Unlocks.js';
 import { createTree, createFlower } from './entities/Tree.js';
 import { createBubble } from './entities/Bubble.js';
+import { createTreatBall } from './entities/TreatBall.js';
 import { createDinosaur, SPECIES } from './entities/Dinosaur.js';
 import { createEgg, createNest as createNestEntity, createPoop, createMysteryEgg } from './entities/Ecosystem.js';
 import { rollVariant, VARIANTS } from './entities/Variants.js';
@@ -247,6 +248,15 @@ function placeEntity(point, kind) {
     audio.playSparkle();
     ctx.bubbleUntil = ctx.time + 4.5;
     return; // 泡泡不发 'place' 事件（不计入图鉴/里程碑）
+  } else if (kind === 'treat') {
+    // 零食球：放下一颗会顺坡滚的零食球，给个随机小推力让它先滚两步；恐龙跑来分着啃。LIMITS.treat 控量。
+    const groundY = Math.max(SEA_LEVEL, terrain.getHeightAt(point.x, point.z));
+    const a = Math.random() * Math.PI * 2;
+    const ball = createTreatBall({ x: Math.cos(a) * 1.4, z: Math.sin(a) * 1.4 });
+    addEntity(ball, new THREE.Vector3(point.x, groundY + 0.4, point.z));
+    audio.playPlop();
+    ctx.treatUntil = ctx.time + 28; // 与零食球寿命相当：此后恐龙才停止扫描，省性能
+    return; // 零食球是玩具，不计入图鉴/里程碑
   } else {
     // 硬上限：活恐龙到顶 → 轻 squeak + 计数标签抖动，拒绝放置
     if (aliveDinoCount() >= quality.dinoCap) {
@@ -725,6 +735,7 @@ const ctx = {
   gatherUntil: 0,   // 集合截止的 ctx.time
   bloom: 1,         // 花朵开放度（晴/彩虹=1，阴雨=0），花朵据此缓动开合
   bubbleUntil: 0,   // 有泡泡在场的截止 ctx.time（恐龙只在此前扫描追泡泡，省性能）
+  treatUntil: 0,    // 有零食球在场的截止 ctx.time（恐龙只在此前扫描追零食球，省性能）
 };
 const clock = new Clock(timeOfDay); // 左下角卡通时钟（表盘 + 数字）
 const frameClock = new THREE.Clock();

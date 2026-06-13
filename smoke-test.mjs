@@ -1119,7 +1119,7 @@ if (entityCount < 17 || dinosaurState.species.length < 14) {
   console.error('\n❌ dinosaurs were not placed (15 species expected)');
   process.exit(1);
 }
-if (!splashHidden || toolCount !== 7 || topCount !== 6) {
+if (!splashHidden || toolCount !== 8 || topCount !== 6) {
   console.error('\n❌ UI not wired correctly');
   process.exit(1);
 }
@@ -1319,7 +1319,7 @@ if (finalTriangles < 1000) {
   console.error('\n❌ rendering broken after world events');
   process.exit(1);
 }
-const EXPECTED_CATS = ['earth', 'earth', 'plant', 'plant', 'special', 'special', 'herb'];
+const EXPECTED_CATS = ['earth', 'earth', 'plant', 'plant', 'special', 'special', 'special', 'herb'];
 if (JSON.stringify(tutStart.dataCats) !== JSON.stringify(EXPECTED_CATS)) {
   console.error('\n❌ toolbar data-cat attributes wrong');
   process.exit(1);

@@ -597,6 +597,7 @@ export function createDinosaur(species, saved = null, opts = {}) {
   let hiccupTimer = 25 + Math.random() * 55; // 偶发打嗝（漫步时的小俏皮）
   let startleCool = Math.random() * 2;       // 食草龙受惊冷却，避免一群龙抖个不停
   let spinT = -1;                            // 挠痒到位的开心大转圈计时（-1=没在转）
+  let treatCool = 0;                         // 啃零食球的间隔冷却（避免每帧狂啃）
   let raisedEmitted = age >= 60; // 读档的成年龙不再重复发 raised
 
   function growthFactor() {
@@ -1072,6 +1073,40 @@ export function createDinosaur(species, saved = null, opts = {}) {
         const d = moveToward({ x: bub.object3d.position.x, z: bub.object3d.position.z }, dt, ctx.terrain, 1.5);
         if (d <= Math.max(0.8, wrapper.size * 0.85) && bub.consume(ctx.removeEntity)) {
           wrapper.startEmote('pet', ctx); // 顶破了开心一下
+        }
+        return;
+      }
+    }
+
+    // 追零食球：附近有滚动的零食球就跑去啃几口（玩耍＋进食，喂养回路的自动版；飞行/游泳/睡觉不参与）
+    if (treatCool > 0) treatCool -= dt;
+    if (
+      ctx.treatUntil && ctx.time < ctx.treatUntil &&
+      !wrapper.flying && !wrapper.swimming && wrapper.lifeState !== 'sleeping'
+    ) {
+      let ball = null, td = 100; // 10u 内找最近的零食球
+      for (const e of ctx.entities) {
+        if (!e.isTreat || !e.alive || e.consumed) continue;
+        const dx = e.object3d.position.x - group.position.x;
+        const dz = e.object3d.position.z - group.position.z;
+        const d2 = dx * dx + dz * dz;
+        if (d2 < td) { td = d2; ball = e; }
+      }
+      if (ball) {
+        wrapper.lifeState = 'playing';
+        wrapper.target = null;
+        alertMarker.visible = false;
+        const d = moveToward({ x: ball.object3d.position.x, z: ball.object3d.position.z }, dt, ctx.terrain, 1.5);
+        if (d <= Math.max(0.9, wrapper.size * 0.8) && treatCool <= 0 && ball.nibble(0.34, ctx)) {
+          treatCool = 0.5;
+          wrapper.hungerTimer = Math.min(SATIATION_MAX, wrapper.hungerTimer + 16); // 啃一口补点饱
+          foodGrowth += 0.04;                                                       // 也长一点点
+          wrapper.startEmote('eat', ctx);
+          ctx.audio?.playCrunch?.();
+          const bp = ball.object3d.position;
+          ctx.particles.burst({ x: bp.x, y: bp.y + 0.2, z: bp.z }, {
+            count: 6, colors: ['#ffd98a', '#f6a35c', '#fff3d6'], speed: 1.4, gravity: 5, life: 0.5, size: 0.13,
+          });
         }
         return;
       }
