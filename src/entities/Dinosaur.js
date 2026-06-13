@@ -596,6 +596,7 @@ export function createDinosaur(species, saved = null, opts = {}) {
   let emoteKind = null;                     // 当前 emote 类型（控制小跳高度等）
   let hiccupTimer = 25 + Math.random() * 55; // 偶发打嗝（漫步时的小俏皮）
   let startleCool = Math.random() * 2;       // 食草龙受惊冷却，避免一群龙抖个不停
+  let spinT = -1;                            // 挠痒到位的开心大转圈计时（-1=没在转）
   let raisedEmitted = age >= 60; // 读档的成年龙不再重复发 raised
 
   function growthFactor() {
@@ -828,8 +829,9 @@ export function createDinosaur(species, saved = null, opts = {}) {
     hiccup: ['#ffe9a8', '#fff2c0'],
     yawn: ['#cfe8ff', '#ffffff', '#e8f4ff'],
     startled: ['#ffffff', '#ffd9d9'],
+    tickle: ['#fff0a8', '#ffd3e2', '#c8ffd8'],
   };
-  const HOP_EMOTES = new Set(['eat', 'pet', 'hiccup']);
+  const HOP_EMOTES = new Set(['eat', 'pet', 'hiccup', 'tickle']);
   wrapper.startEmote = (type, ctx) => {
     if (!wrapper.alive || wrapper.consumed) return;
     emoteKind = type;
@@ -870,6 +872,31 @@ export function createDinosaur(species, saved = null, opts = {}) {
     ctx.bus.emit('pet', { species });
   };
 
+  // 挠痒：每点一下咯咯笑+扭一下；连挠 4 下笑到打转 + 五彩花瓣喷发（2.5s 不挠就忘掉进度）
+  wrapper.tickle = (ctx) => {
+    if (!wrapper.alive || wrapper.consumed) return;
+    if (wrapper.lifeState === 'sleeping') {
+      wrapper.lifeState = 'wandering';
+      wakeTimer = 20;
+      if (wrapper._snoring) { ctx.audio?.stopSnore?.(wrapper.object3d.id); wrapper._snoring = false; }
+    }
+    wrapper._tickleCount = (wrapper._tickleCount || 0) + 1;
+    wrapper._tickleDecay = 2.5;
+    if (wrapper._tickleCount >= 4) {
+      wrapper._tickleCount = 0;
+      ctx.audio?.playGiggle?.(true);
+      if (!wrapper.flying) { emoteTime = -1; spinT = 0; } // 开心大转圈
+      const p = group.position;
+      ctx.particles.burst({ x: p.x, y: p.y + wrapper.size * 1.3, z: p.z }, {
+        count: 26, colors: ['#ff8fb1', '#ffd45e', '#b58cff', '#7ad7ff', '#ff9f5e', '#ffffff'],
+        speed: 2.4, gravity: -1.0, life: 1.2, size: 0.22,
+      });
+    } else {
+      wrapper.startEmote('tickle', ctx);
+      ctx.audio?.playGiggle?.(false);
+    }
+  };
+
   // 手动喂食：玩家点击泡泡上的 🍖 按钮触发。喂食 = 喂饱 + 长大（核心奖励回路）。
   wrapper.feed = (ctx) => {
     if (!wrapper.alive || wrapper.consumed || config.diet === 'none') return;
@@ -894,6 +921,11 @@ export function createDinosaur(species, saved = null, opts = {}) {
   wrapper.update = (dt, ctx) => {
     if (!wrapper.alive) return;
     age += dt;
+    // 挠痒进度衰减：2.5s 不挠就忘掉连击数
+    if (wrapper._tickleDecay > 0) {
+      wrapper._tickleDecay -= dt;
+      if (wrapper._tickleDecay <= 0) wrapper._tickleCount = 0;
+    }
     if (!raisedEmitted && age >= 60) {
       raisedEmitted = true;
       ctx.bus.emit('raised', { species });
@@ -945,6 +977,19 @@ export function createDinosaur(species, saved = null, opts = {}) {
       const wide = 1 + (1 - squash) * 0.6;
       group.scale.set(visualScale * wide, visualScale * squash, visualScale * wide);
       if (t >= 1) emoteTime = -1;
+      return;
+    }
+
+    // 挠痒到位：开心地原地快转一圈 + 小跳，0.8s 渐停
+    if (spinT >= 0) {
+      spinT += dt;
+      const t = Math.min(1, spinT / 0.8);
+      group.rotation.y += dt * 16 * (1 - t * 0.7);
+      const hop = Math.sin(t * Math.PI);
+      const p = group.position;
+      p.y = Math.max(ctx.seaLevel, ctx.terrain.getHeightAt(p.x, p.z)) + hop * wrapper.size * 0.5;
+      group.scale.setScalar(visualScale * (1 + hop * 0.14));
+      if (t >= 1) spinT = -1;
       return;
     }
 

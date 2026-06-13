@@ -7,6 +7,9 @@ import { PETAL_COLORS } from '../entities/Tree.js';
 // 与常驻的 Weather 不同，这里的几何体/材质都是事件期间临时创建的，
 // 统一在事件结束（cleanup）时释放。
 const tmpColor = new THREE.Color();
+// 流星许愿：每颗流星挂一个透明大碰撞球，让小朋友更容易点中（模块级共享，不随事件释放）
+const METEOR_HIT_GEO = new THREE.SphereGeometry(1.7, 6, 6);
+const METEOR_HIT_MAT = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
 
 export class WorldEvents {
   constructor({ scene, terrain, sky, particles, stage, ensureNight, placeEntity }) {
@@ -167,6 +170,11 @@ export class WorldEvents {
         m.obj.add(node);
         m.mats.push(mat);
       }
+      // 透明大碰撞球 + wrapper：供输入射线把流星当作可点目标
+      const collider = new THREE.Mesh(METEOR_HIT_GEO, METEOR_HIT_MAT);
+      collider.userData.entity = { isMeteor: true, meteor: m };
+      m.obj.add(collider);
+      m.collider = collider;
       m.obj.visible = false;
       group.add(m.obj);
       meteors.push(m);

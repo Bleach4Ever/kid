@@ -64,10 +64,16 @@ export class Input {
 
   _down(e) {
     if (e.target !== this.dom) return; // 点的是 UI 按钮，放行
-    // 点到恐龙永远是抚摸，无视当前工具
+    // 点到「可点目标」：流星→许愿；挠痒工具点恐龙→挠痒；否则点恐龙永远是抚摸（无视当前工具）
     const petTarget = this._petHit(e.clientX, e.clientY);
     if (petTarget) {
-      this.actions.pet(petTarget);
+      if (petTarget.isMeteor) {
+        this.actions.wish?.(petTarget);
+      } else if (this.tools.current?.type === 'tickle' && petTarget.isDinosaur) {
+        this.actions.tickle?.(petTarget);
+      } else {
+        this.actions.pet(petTarget);
+      }
       this.controls.enabled = false;
       this.interacting = true;
       this.activeTool = { type: 'pet' };

@@ -232,6 +232,13 @@ export class Audio {
     this._tone(820, 0.05, { type: 'sine', peak: 0.16, slideTo: 380 });
   }
 
+  // 挠痒咯咯笑：一串短促上扬的三角音（big=笑到打转，更长更欢）
+  playGiggle(big = false) {
+    if (!this._cryOk()) return;
+    const notes = big ? [760, 920, 1080, 1240, 1400] : [820, 1020, 760];
+    notes.forEach((f, i) => this._tone(f, 0.07, { type: 'triangle', peak: 0.08, when: i * 0.06, slideTo: f * 0.8 }));
+  }
+
   playSparkle() {
     const notes = [523.25, 659.25, 783.99, 1046.5];
     notes.forEach((f, i) =>

@@ -9,6 +9,7 @@ export const BASE_TOOLS = [
   { id: 'tree', icon: '🌳', label: 'tool.tree', type: 'place', kind: 'tree', cat: 'plant' },
   { id: 'flower', icon: '🌷', label: 'tool.flower', type: 'place', kind: 'flower', cat: 'plant' },
   { id: 'bubble', icon: '🫧', label: 'tool.bubble', type: 'place', kind: 'bubble', cat: 'special' },
+  { id: 'tickle', icon: '🪶', label: 'tool.tickle', type: 'tickle', cat: 'special' },
 ];
 
 // 恐龙按钮直接由物种表生成：加物种零工具栏代码；按类别排序保持分组紧凑

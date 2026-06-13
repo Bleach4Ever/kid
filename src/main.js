@@ -521,6 +521,25 @@ const actions = {
     if (entity.isDinosaur && entity.getHunger)
       hungerBubble.show(entity, (e) => e.feed?.(ctx)); // 头顶泡泡，饿了可手动喂
   },
+  tickle: (entity) => entity.tickle?.(ctx), // 挠痒工具点恐龙
+  // 流星许愿：点中流星 → 喂饱最饿的恐龙 + 花朵开放 + 漫天闪光
+  wish: (meteorWrapper) => {
+    const pos = meteorWrapper?.meteor?.obj?.position?.clone();
+    if (meteorWrapper?.meteor) meteorWrapper.meteor.obj.visible = false; // 立即隐藏，防重复点
+    let hungriest = null, minF = 1.01;
+    for (const e of entities) {
+      if (!e.isDinosaur || !e.alive || e.consumed || e.flying || e.swimming) continue;
+      const h = e.getHunger?.();
+      if (h && !h.dietNone && h.fullness < minF) { minF = h.fullness; hungriest = e; }
+    }
+    if (hungriest) hungriest.feed(ctx);
+    ctx.bloom = 1; // 顺手让花朵都绽放
+    audio.playSparkle();
+    if (pos) particles.burst({ x: pos.x, y: pos.y, z: pos.z }, {
+      count: 36, colors: ['#ffd96b', '#fff2c0', '#c8ffff', '#ffd3f0'],
+      speed: 3.0, gravity: -0.6, life: 1.3, size: 0.22,
+    });
+  },
 };
 
 // ---------------- 输入 ----------------
@@ -534,9 +553,16 @@ const input = new Input({
   actions,
   // pointerdown 时构建一次可点目标列表；空中翼龙不可摸，落地夜栖（perched）的可摸醒；
   // 神秘蛋（点一下 = 开启）与海洋生物（点一下 = 可爱反应）也算可点目标
-  getPetTargets: () => entities
-    .filter((e) => ((e.isDinosaur && (!e.flying || e.perched)) || e.isMysteryEgg || e.isSeaLife) && e.alive && !e.consumed)
-    .map((e) => e.object3d),
+  getPetTargets: () => {
+    const list = entities
+      .filter((e) => ((e.isDinosaur && (!e.flying || e.perched)) || e.isMysteryEgg || e.isSeaLife) && e.alive && !e.consumed)
+      .map((e) => e.object3d);
+    // 流星雨期间：把可见流星的碰撞球也加进来，点中即许愿
+    if (worldEvents.active && worldEvents.current?.id === 'meteor') {
+      for (const m of worldEvents.current.meteors) if (m.obj.visible && m.collider) list.push(m.collider);
+    }
+    return list;
+  },
 });
 
 // ---------------- 顶部动作 ----------------
