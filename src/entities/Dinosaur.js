@@ -90,6 +90,23 @@ const SPECIES = {
     diet: 'none', baseSize: 1.3, speed: 0.85,
     body: '#4d7fd1', accent: '#aee3f5', swimming: true, rarity: 'rare',
   },
+  // —— 新增程序化物种（无外部模型，沿用 builder 体系，风格统一）——
+  carnotaurus: {
+    diet: 'carnivore', baseSize: 1.1, speed: 1.95,
+    body: '#e07a4f', accent: '#ffd0a0', rarity: 'uncommon',
+  },
+  gallimimus: {
+    diet: 'herbivore', baseSize: 0.85, speed: 2.25,
+    body: '#d9b25e', accent: '#fff0c0', rarity: 'uncommon',
+  },
+  styracosaurus: {
+    diet: 'herbivore', baseSize: 1.05, speed: 1.3,
+    body: '#cf8a5e', accent: '#ffd9a8', rarity: 'uncommon',
+  },
+  compsognathus: {
+    diet: 'carnivore', baseSize: 0.55, speed: 2.6,
+    body: '#8fce6f', accent: '#ffe27a', rarity: 'uncommon',
+  },
 };
 
 function material(color) {
@@ -160,6 +177,56 @@ function buildTriceratops(bodyMat, accentMat) {
   return { group: g, stepParts: [] };
 }
 
+// 似鸡龙：细长身 + 长脖 + 小头小喙 + 大长腿，鸵鸟一样的飞毛腿
+function buildGallimimus(bodyMat, accentMat) {
+  const g = new THREE.Group();
+  const bodyY = 1.0;
+  mesh(new THREE.IcosahedronGeometry(0.42, 1), bodyMat, g, [0, bodyY, 0], [0.85, 0.82, 1.5]);
+  const neck = mesh(new THREE.CylinderGeometry(0.1, 0.15, 0.72, 6), bodyMat, g, [0, bodyY + 0.42, 0.4]);
+  neck.rotation.x = 0.55;
+  const head = mesh(new THREE.IcosahedronGeometry(0.2, 1), bodyMat, g, [0, bodyY + 0.82, 0.66], [1, 0.9, 1.3]);
+  const beak = mesh(new THREE.ConeGeometry(0.07, 0.22, 6), accentMat, g, [0, bodyY + 0.79, 0.9]);
+  beak.rotation.x = Math.PI / 2;
+  addEyes(head, 0.05, 0.16, 0.12, 0.05);
+  const legs = [];
+  for (const side of [-1, 1]) {
+    const legH = 1.05;
+    const leg = mesh(new THREE.CylinderGeometry(0.06, 0.09, legH, 6), bodyMat, g, [side * 0.18, legH / 2, -0.05]);
+    legs.push(leg);
+    mesh(new THREE.SphereGeometry(0.09, 6, 5), bodyMat, g, [side * 0.18, legH, -0.05]);
+    for (const tz of [0.05, 0.16]) {
+      const toe = mesh(new THREE.ConeGeometry(0.035, 0.12, 4), accentMat, leg, [0, -legH / 2 + 0.02, tz]);
+      toe.rotation.x = Math.PI / 2;
+    }
+    const arm = mesh(new THREE.CylinderGeometry(0.035, 0.05, 0.34, 5), bodyMat, g, [side * 0.3, bodyY + 0.05, 0.38]);
+    arm.rotation.z = side * 0.6;
+  }
+  addTail(g, bodyMat, [0, bodyY, -0.95], 1.45, 0.17);
+  return { group: g, stepParts: legs };
+}
+
+// 戟龙：颈盾边缘一圈放射状长戟刺 + 大鼻角，三角龙家族里最「刺」的招牌轮廓
+function buildStyracosaurus(bodyMat, accentMat) {
+  const g = new THREE.Group();
+  mesh(new THREE.IcosahedronGeometry(0.68, 1), bodyMat, g, [0, 0.88, 0], [1, 0.72, 1.3]);
+  const head = mesh(new THREE.IcosahedronGeometry(0.46, 1), bodyMat, g, [0, 0.9, 0.85], [1, 0.85, 1.05]);
+  mesh(new THREE.ConeGeometry(0.6, 0.3, 8), accentMat, g, [0, 1.12, 0.58], [1, 1, 0.62]).rotation.x = Math.PI / 2;
+  for (let i = 0; i < 6; i++) { // 招牌长戟刺
+    const a = (i / 5 - 0.5) * 2.0;
+    const spike = mesh(new THREE.ConeGeometry(0.07, 0.62, 6), toothMat, g, [Math.sin(a) * 0.6, 1.12 + Math.cos(a) * 0.2, 0.5]);
+    spike.rotation.z = -a;
+    spike.rotation.x = -0.35;
+  }
+  const noseHorn = mesh(new THREE.ConeGeometry(0.1, 0.62, 7), toothMat, g, [0, 1.0, 1.3]);
+  noseHorn.rotation.x = Math.PI / 2 - 0.5;
+  const beak = mesh(new THREE.ConeGeometry(0.12, 0.26, 6), eyeMat, g, [0, 0.8, 1.4]);
+  beak.rotation.x = Math.PI / 2;
+  addEyes(head, 0.12, 0.4, 0.22);
+  addLegs(g, bodyMat, [[-0.4, -0.46], [0.4, -0.46], [-0.4, 0.48], [0.4, 0.48]]);
+  addTail(g, bodyMat, [0, 0.84, -1.15], 1.1, 0.24);
+  return { group: g, stepParts: [] };
+}
+
 function buildBrachiosaurus(bodyMat, accentMat) {
   const g = new THREE.Group();
   mesh(new THREE.IcosahedronGeometry(0.72, 1), bodyMat, g, [0, 1.1, -0.2], [1, 0.78, 1.45]);
@@ -223,6 +290,13 @@ function buildPredator(bodyMat, accentMat, small, opts = {}) {
       const brow = mesh(new THREE.ConeGeometry(0.07, 0.16, 4), bodyMat, head,
         [side * (small ? 0.22 : 0.3), 0.24, small ? 0.2 : 0.28]);
       brow.rotation.x = -0.6;
+    }
+  }
+  if (opts.horns) { // 食肉牛龙的标志性牛角：眼上方两根外撇的角
+    for (const side of [-1, 1]) {
+      const horn = mesh(new THREE.ConeGeometry(0.06, 0.36, 6), toothMat, head, [side * 0.26, 0.3, 0.12]);
+      horn.rotation.z = side * -0.5;
+      horn.rotation.x = -0.2;
     }
   }
   const legs = [];
@@ -460,6 +534,10 @@ function buildModel(species, config, variant) {
   if (species === 'spinosaurus') return buildSpinosaurus(bodyMat, accentMat);
   if (species === 'therizinosaurus') return buildTherizinosaurus(bodyMat, accentMat);
   if (species === 'mosasaurus') return buildMosasaurus(bodyMat, accentMat);
+  if (species === 'carnotaurus') return buildPredator(bodyMat, accentMat, false, { fangs: true, horns: true });
+  if (species === 'compsognathus') return buildPredator(bodyMat, accentMat, true);
+  if (species === 'gallimimus') return buildGallimimus(bodyMat, accentMat);
+  if (species === 'styracosaurus') return buildStyracosaurus(bodyMat, accentMat);
   return buildPterosaur(bodyMat, accentMat);
 }
 

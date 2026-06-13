@@ -20,6 +20,11 @@ export const SPECIES_MILESTONES = [
   { species: 'pachycephalosaurus', counter: 'pet', need: 10, hint: '💗' },
   { species: 'diplodocus', counter: 'raisedHerb', need: 8, hint: '🌿' },
   { species: 'spinosaurus', counter: 'raisedCarn', need: 5, hint: '🍖' },
+  // 新增物种：更深的里程碑，作为后期收集目标
+  { species: 'styracosaurus', counter: 'placed', need: 10, hint: '🦕' },
+  { species: 'compsognathus', counter: 'hatched', need: 8, hint: '🐣' },
+  { species: 'carnotaurus', counter: 'raisedCarn', need: 8, hint: '🍖' },
+  { species: 'gallimimus', counter: 'raisedHerb', need: 12, hint: '🌿' },
 ];
 
 const HINTS = Object.fromEntries(SPECIES_MILESTONES.map((m) => [m.species, m.hint]));

@@ -48,6 +48,19 @@ const CRIES = {
     a._tone(360, 0.22, { type: 'triangle', peak: 0.09, when: 0.26, slideTo: 470 });
   },
   mosasaurus: (a) => a._tone(220, 0.5, { type: 'sine', peak: 0.12, slideTo: 90, echo: true }),
+  carnotaurus: (a) => { // 粗哑低吼 + 一记顿挫
+    a._tone(160, 0.38, { type: 'sawtooth', peak: 0.13, slideTo: 90 });
+    a._tone(110, 0.18, { type: 'square', peak: 0.09, when: 0.34, slideTo: 70 });
+  },
+  gallimimus: (a) => { // 快速高啁啾，像受惊的鸟
+    a._tone(900, 0.09, { type: 'sine', peak: 0.08, slideTo: 1300 });
+    a._tone(1100, 0.09, { type: 'sine', peak: 0.07, when: 0.1, slideTo: 1500 });
+  },
+  styracosaurus: (a) => a._tone(260, 0.36, { type: 'square', peak: 0.08, slideTo: 170 }),
+  compsognathus: (a) => { // 极小的吱吱声
+    a._tone(1200, 0.07, { type: 'sine', peak: 0.05, slideTo: 1700 });
+    a._tone(1500, 0.06, { type: 'sine', peak: 0.04, when: 0.08, slideTo: 1900 });
+  },
 };
 
 export class Audio {

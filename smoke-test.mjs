@@ -62,7 +62,7 @@ for (const t of ['tree', 'flower']) {
   await page.mouse.click(520, 380);
   await page.waitForTimeout(80);
 }
-// 抽屉初始状态：15 个按钮，3 个起步可选（三角龙/霸王龙/翼龙），12 个锁定（10 里程碑带提示 + 2 神秘蛋隐藏）
+// 抽屉初始状态：19 个按钮，3 个起步可选（三角龙/霸王龙/翼龙），16 个锁定（14 里程碑带提示 + 2 神秘蛋隐藏）
 await page.locator('#toolbar .tool-btn[data-tool="dinos"]').click({ force: true });
 await page.waitForTimeout(350);
 const dinoBarState = await page.evaluate(() => {
@@ -94,7 +94,8 @@ await page.evaluate(() => {
   const w = window.__world;
   const locked = ['stegosaurus', 'brachiosaurus', 'raptor', 'oviraptor',
     'ankylosaurus', 'parasaurolophus', 'pachycephalosaurus', 'dilophosaurus',
-    'diplodocus', 'spinosaurus', 'therizinosaurus', 'mosasaurus'];
+    'diplodocus', 'spinosaurus', 'therizinosaurus', 'mosasaurus',
+    'carnotaurus', 'gallimimus', 'styracosaurus', 'compsognathus'];
   locked.forEach((s, i) => {
     w.placeEntity({ x: 5, z: 5 }, s);
     const last = w.entities[w.entities.length - 1];
@@ -1123,8 +1124,8 @@ if (!splashHidden || toolCount !== 9 || topCount !== 6) {
   console.error('\n❌ UI not wired correctly');
   process.exit(1);
 }
-if (!dinoBarState.open || dinoBarState.total !== 15 || dinoBarState.locked !== 12 ||
-    dinoBarState.hidden !== 2 || dinoBarState.hints !== 10 || dinoBarState.unlockedIds.length !== 3) {
+if (!dinoBarState.open || dinoBarState.total !== 19 || dinoBarState.locked !== 16 ||
+    dinoBarState.hidden !== 2 || dinoBarState.hints !== 14 || dinoBarState.unlockedIds.length !== 3) {
   console.error('\n❌ dino drawer initial lock state wrong', dinoBarState);
   process.exit(1);
 }
@@ -1239,12 +1240,12 @@ if (!pediaUnlock.raptorSeen || !pediaUnlock.toastShown || !pediaUnlock.badgeOn) 
   console.error('\n❌ pedia unlock (seen/toast/badge) failed');
   process.exit(1);
 }
-if (!pediaModal.visible || pediaModal.cards !== 15 || pediaModal.locked !== 14 || !pediaModal.badgeCleared) {
+if (!pediaModal.visible || pediaModal.cards !== 19 || pediaModal.locked !== 18 || !pediaModal.badgeCleared) {
   console.error('\n❌ pedia modal cards/silhouettes/badge state wrong');
   process.exit(1);
 }
-if (pediaModal.rare !== 3 || pediaModal.uncommon !== 9 || pediaModal.meterChips !== 3 ||
-    !pediaModal.progressBar || pediaModal.hints !== 11 || pediaModal.mysteryCards !== 2 ||
+if (pediaModal.rare !== 3 || pediaModal.uncommon !== 13 || pediaModal.meterChips !== 3 ||
+    !pediaModal.progressBar || pediaModal.hints !== 15 || pediaModal.mysteryCards !== 2 ||
     pediaModal.swatchDots !== 4) {
   console.error('\n❌ pedia collection UI (rarity/meter/hints/swatches) wrong', pediaModal);
   process.exit(1);
