@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { WORLD_SIZE, SEA_LEVEL } from '../constants.js';
 import { clamp, easeOutBack, lerp, TAU } from '../utils.js';
 import { VARIANTS } from './Variants.js';
+import { attachHybridModel } from './HybridModel.js'; // 【试点】T-Rex 用 CC0 glTF 模型替换视觉
 
 const BOUND = WORLD_SIZE * 0.46;
 const MOUNTAIN_H = SEA_LEVEL + 3; // 翼龙夜栖偏好的「高山」高度门槛（约 3.6）
@@ -533,6 +534,8 @@ export function createDinosaur(species, saved = null, opts = {}) {
   const variantCfg = variant ? VARIANTS[variant] : null;
   const model = buildModel(species, config, variant);
   const group = model.group;
+  // 【混合模型试点】指定物种（当前仅 T-Rex）在 marker 之前换成 glTF 模型，保留全部程序化 AI
+  const hybrid = attachHybridModel(group, species, config, variant);
   const alertMarker = addAlertMarker(group);
   const sleepMarker = addSleepMarker(group);
   const wrapper = {
@@ -967,6 +970,7 @@ export function createDinosaur(species, saved = null, opts = {}) {
   wrapper.update = (dt, ctx) => {
     if (!wrapper.alive) return;
     age += dt;
+    if (hybrid) hybrid.update(dt); // 骨骼动画每帧推进（须在各种早退之前）
     // 挠痒进度衰减：2.5s 不挠就忘掉连击数
     if (wrapper._tickleDecay > 0) {
       wrapper._tickleDecay -= dt;
