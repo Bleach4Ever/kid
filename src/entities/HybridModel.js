@@ -7,8 +7,17 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { VARIANTS } from './Variants.js';
 
-// 物种 → glb 路径（目前只接了 T-Rex 试点；要扩到 6 种就在这里加映射）
-const MODEL_URLS = { trex: './models/quaternius-dino.glb' };
+// 物种 → glb 路径（Quaternius Animated Dinosaurs，6 种，CC0）。要再扩就在这里加映射。
+// 长颈龙：包里是 Apatosaurus，归到我们的 brachiosaurus。
+const MODEL_URLS = {
+  trex: './models/trex.glb',
+  raptor: './models/raptor.glb',
+  triceratops: './models/triceratops.glb',
+  parasaurolophus: './models/parasaurolophus.glb',
+  stegosaurus: './models/stegosaurus.glb',
+  brachiosaurus: './models/brachiosaurus.glb',
+};
+const triCount = (g) => (g?.index ? g.index.count : g?.attributes?.position?.count || 0) / 3;
 const FACE_OFFSET = Math.PI; // 让 glTF 朝向与程序化(+Z 向前)对齐
 
 const loaders = {};
@@ -61,22 +70,24 @@ export function attachHybridModel(group, species, config, variant) {
     scene.scale.setScalar(s);
     scene.position.y = -box.min.y * s; // 脚底（最低骨骼）对齐 group 原点
 
-    // 平面着色 + 调色：主色 / 辅色按该物种（或变体）配色
+    // 平面着色 + 调色：各模型材质命名不统一，改用三角面数启发——最大块=主体、次大=辅色，
+    // 其余（眼/牙/舌等小块）保留模型原色。逐实例克隆材质，调色/变体互不影响。
     const vc = variant ? VARIANTS[variant] : null;
     const bodyCol = new THREE.Color(vc?.body || config.body);
     const accentCol = new THREE.Color(vc?.accent || config.accent);
-    scene.traverse((o) => {
-      if (!o.isMesh) return;
+    const meshes = [];
+    scene.traverse((o) => { if (o.isMesh) meshes.push(o); });
+    meshes.sort((a, b) => triCount(b.geometry) - triCount(a.geometry));
+    meshes.forEach((o, i) => {
       o.castShadow = true;
-      if (o.geometry) o.geometry.userData.shared = true; // 与缓存共享，disposeObj 跳过
-      const m = o.material;
-      if (!m) return;
+      if (o.geometry) o.geometry.userData.shared = true; // 几何与缓存共享，disposeObj 跳过
+      const m = o.material.clone();
       m.flatShading = true;
-      const n = m.name || '';
-      if (/Main|Body/i.test(n)) m.color.copy(bodyCol);
-      else if (/Secondary/i.test(n)) m.color.copy(accentCol);
+      if (i === 0) m.color.copy(bodyCol);
+      else if (i === 1) m.color.copy(accentCol);
       if (vc?.emissive) { m.emissive = new THREE.Color(vc.emissive); m.emissiveIntensity = 0.3; }
       m.needsUpdate = true;
+      o.material = m;
     });
 
     inner.add(scene);

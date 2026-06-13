@@ -1,0 +1,21 @@
+3D 恐龙模型 / 3D dinosaur models
+================================
+
+来源 / Source: Quaternius — Animated Dinosaur Pack
+  https://quaternius.com/packs/animateddinosaurs.html
+  https://poly.pizza/bundle/Animated-Dinosaur-Bundle-SmoLdBLO2K
+
+许可 / License: CC0 1.0 Universal (Public Domain Dedication)
+  无需署名，可商用。此文件仅作出处留档。
+  No attribution required; recorded here only for provenance.
+
+文件 / Files (各对应游戏内物种 / mapped to in-game species):
+  trex.glb            <- T-Rex
+  raptor.glb          <- Velociraptor
+  triceratops.glb     <- Triceratops
+  parasaurolophus.glb <- Parasaurolophus
+  stegosaurus.glb     <- Stegosaurus
+  brachiosaurus.glb   <- Apatosaurus
+
+用法 / Usage: 见 src/entities/HybridModel.js（混合模型：保留程序化 AI，仅替换视觉）。
+新增模型须为 CC0 且无贴图（纯材质色）。

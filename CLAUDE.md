@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 「我的小世界」(My Little World) —— 给 5 岁小朋友玩的低多边形恐龙世界模拟器，基于 three.js + Vite，纯浏览器运行。核心设计约束：
 
 - **5 岁友好**：没有失败/分数/倒计时，极少文字（教程是无字的），超大图标，温和反馈。
-- **零外部素材**：所有音乐音效用 Web Audio 实时合成，模型全部程序化生成，字体经 `scripts/subset-font.mjs` 子集化。新功能不得引入外部音频/模型文件。
+- **素材策略**：音乐音效一律 Web Audio 实时合成，**绝不引入外部音频文件**；字体经 `scripts/subset-font.mjs` 子集化。模型默认程序化生成（树/花/景物/生态等保持程序化）。**例外**：恐龙视觉可采用 **CC0**（公共领域，无需署名）低多边形 glTF 模型——走「混合模型」方案（见 `entities/HybridModel.js`：保留整套程序化 AI，仅替换视觉，强制平面着色 + 按物种配色贴合画风），模型放 `public/models/`。当前 6 种land恐龙（trex/raptor/triceratops/parasaurolophus/stegosaurus/brachiosaurus）用 Quaternius CC0 模型，其余仍程序化。新引入模型必须 CC0 且无贴图（纯材质色，保持低多边形 + 小体积）。
 - 代码注释和 UI 文案以中文为主，支持中/英双语（`src/i18n.js`）。
 
 ## 常用命令
